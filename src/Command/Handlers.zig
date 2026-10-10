@@ -4,7 +4,7 @@ const Context = @import("Context.zig");
 const Self = @This();
 ptr: *anyopaque,
 vt: *const struct {
-    handleExecute: *const fn (ptr: *anyopaque, ctx: Context) void,
+    handleExecute: *const fn (ptr: *anyopaque, ctx: *Context) void,
 },
 
 pub fn init(ctx: anytype, comptime Impls: type) Self {
@@ -24,6 +24,6 @@ pub fn init(ctx: anytype, comptime Impls: type) Self {
     };
 }
 
-pub fn callExecute(self: Self, ctx: Context) void {
+pub fn callExecute(self: Self, ctx: *Context) void {
     return self.vt.handleExecute(self.ptr, ctx);
 }
