@@ -8,12 +8,6 @@ argv: []const [:0]const u8,
 args: std.ArrayList(*const []const u8),
 options: std.StringHashMap(?[]const u8),
 
-pub fn createFromProcess(init: std.process.Init) !*Self {
-    const allocator: Allocator = init.arena.allocator();
-    const argv = try init.minimal.args.toSlice(allocator);
-    return try .create(allocator, argv, null);
-}
-
 pub fn create(
     allocator: Allocator,
     argv: []const [:0]const u8,

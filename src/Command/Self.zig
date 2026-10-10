@@ -27,6 +27,6 @@ pub fn init(
     };
 }
 
-pub fn callExecute(self: Self, ctx: *Context) void {
+pub fn callExecute(self: Self, ctx: *const Context) void {
     return self.handlers.callExecute(ctx);
 }

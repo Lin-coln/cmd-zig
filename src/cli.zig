@@ -13,13 +13,24 @@ pub fn main(init: std.process.Init) !void {
         _ = SetConsoleOutputCP(65001);
     }
 
-    const arena: Allocator = init.arena.allocator();
-
-    const ctx: *Command.Context = try .createFromProcess(init);
-    defer ctx.destroy();
-
-    const root = try RootCommand.create(arena);
+    const root = try RootCommand.create(init);
     defer root.destroy();
+
+    const allocator: Allocator = init.arena.allocator();
+    const argv = try init.minimal.args.toSlice(allocator);
+    const ctx: *Command.Context = try .create(allocator, argv, null);
+    defer ctx.destroy();
+    for (ctx.args.items, 0..) |arg, idx| {
+        switch (Args.Descriptor.initFromSlice(arg.*)) {
+            .option => |desc| {
+                const opts = root.cmd.options orelse continue;
+                const opt = desc.findOption(opts) orelse continue;
+                _ = ctx.args.orderedRemove(idx);
+                try ctx.options.put(opt.key, desc.value);
+            },
+            else => continue,
+        }
+    }
 
     root.cmd.callExecute(ctx);
 }
@@ -27,14 +38,17 @@ pub fn main(init: std.process.Init) !void {
 const RootCommand = struct {
     const Self = @This();
     allocator: Allocator,
+    init: std.process.Init,
     cmd: Command,
 
-    pub fn create(allocator: Allocator) !*Self {
+    pub fn create(init: std.process.Init) !*Self {
+        const allocator: Allocator = init.arena.allocator();
         const ptr = try allocator.create(Self);
         errdefer allocator.destroy(ptr);
 
         ptr.* = .{
             .allocator = allocator,
+            .init = init,
             .cmd = .init(.{
                 .name = "cli",
                 .desc =
@@ -47,7 +61,7 @@ const RootCommand = struct {
                 },
             }, .{
                 .handlers = .init(ptr, struct {
-                    pub fn handleExecute(c: *Self, ctx: *Command.Context) void {
+                    pub fn handleExecute(c: *Self, ctx: *const Command.Context) void {
                         c.handleExecute(ctx) catch |err| {
                             std.log.err("handleExecute failed: {}", .{err});
                         };
@@ -63,19 +77,7 @@ const RootCommand = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn handleExecute(self: *Self, ctx: *Command.Context) !void {
-        for (ctx.args.items, 0..) |arg, idx| {
-            switch (Args.Descriptor.initFromSlice(arg.*)) {
-                .option => |desc| {
-                    const opts = self.cmd.options orelse continue;
-                    const opt = desc.findOption(opts) orelse continue;
-                    _ = ctx.args.orderedRemove(idx);
-                    try ctx.options.put(opt.key, desc.value);
-                },
-                else => continue,
-            }
-        }
-
+    pub fn handleExecute(_: *Self, ctx: *const Command.Context) !void {
         var iter = ctx.options.iterator();
         for (ctx.args.items) |arg| {
             std.log.info("{s}", .{arg.*});
