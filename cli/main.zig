@@ -3,8 +3,8 @@ const builtin = @import("builtin");
 const mod = @import("mod");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
-const Command = mod.Command;
 const Args = mod.Args;
+const Cmd = mod.Cmd;
 
 extern "kernel32" fn SetConsoleOutputCP(code_page: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
 
@@ -19,50 +19,38 @@ pub fn main(init: std.process.Init) !void {
     const allocator: Allocator = init.arena.allocator();
     const args: []const []const u8 = try init.minimal.args.toSlice(allocator);
 
-    try root.cmd.execute(.{
-        .allocator = allocator,
-        .args = args,
-    });
+    Cmd.callExecute(
+        .{
+            .allocator = allocator,
+            .args = args,
+        },
+        root.handler,
+    ) catch |err| {
+        std.log.err("handleExecute failed: {}", .{err});
+    };
 }
 
 const RootCommand = struct {
     const Self = @This();
     allocator: Allocator,
     init: std.process.Init,
-    cmd: Command,
+    handler: Cmd.Handler,
+    options: []const Cmd.Option,
 
     pub fn create(init: std.process.Init) !*Self {
         const allocator: Allocator = init.arena.allocator();
         const ptr = try allocator.create(Self);
         errdefer allocator.destroy(ptr);
 
-        const cmd = Command.init(
-            .{
-                .name = "cli",
-                .desc =
-                \\this is my awesome multiline description.
-                \\This is already line 2.
-                \\And this is line 3.
-                ,
-                .options = &.{
-                    .{ .key = "help", .alias = 'h', .parser = .bool },
-                },
-            },
-            .{
-                .execute = .init(ptr, struct {
-                    pub fn handleExecute(c: *Self, ctx: Command.Context) void {
-                        c.handleExecute(ctx) catch |err| {
-                            std.log.err("handleExecute failed: {}", .{err});
-                        };
-                    }
-                }),
-            },
-        );
-
         ptr.* = .{
             .allocator = allocator,
             .init = init,
-            .cmd = cmd,
+            .handler = .init(ptr, struct {
+                pub const onExecute = Self.handleExecute;
+            }),
+            .options = &.{
+                .{ .key = "help", .alias = 'h', .parser = .bool },
+            },
         };
 
         return ptr;
@@ -72,22 +60,18 @@ const RootCommand = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn handleExecute(self: *Self, ctx: Command.Context) !void {
-        const cmd = self.cmd;
-
+    pub fn handleExecute(self: *Self, ctx: Cmd.Context) !void {
         const args, const opts = blk: {
             var args: std.ArrayList([]const u8) = .empty;
             defer args.deinit(self.allocator);
-            var options: std.ArrayList(Command.Option.Entry) = .empty;
+            var options: std.ArrayList(Cmd.Option.Entry) = .empty;
             defer options.deinit(self.allocator);
 
             for (ctx.args) |arg| {
                 const desc = Args.parseDescriptorFromArg(arg);
-                if (cmd.options) |opts| {
-                    if (Command.Option.parseEntry(opts, desc)) |entry| {
-                        try options.append(self.allocator, entry);
-                        continue;
-                    }
+                if (Cmd.Option.parseEntry(self.options, desc)) |entry| {
+                    try options.append(self.allocator, entry);
+                    continue;
                 }
                 try args.append(self.allocator, arg);
             }
