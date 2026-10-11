@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const Self = @This();
 allocator: Allocator,
 ref_count: std.atomic.Value(usize) = .init(1),
-items: std.ArrayList(Command) = .empty,
+items: std.ArrayList(*Command) = .empty,
 
 pub fn create(allocator: Allocator) !*Self {
     const self = try allocator.create(Self);
@@ -21,8 +21,8 @@ pub fn release(self: *Self) void {
 
     if (prev != 1) return;
 
-    for (self.items.items) |*command| {
-        command.deinit();
+    for (self.items.items) |command| {
+        command.destroy();
     }
 
     self.items.deinit(self.allocator);
@@ -35,11 +35,11 @@ pub fn retain(self: *Self) *Self {
     return self;
 }
 
-pub fn addCommand(self: *Self, command: Command) !void {
-    try self.items.append(self.allocator, command.clone());
+pub fn addCommand(self: *Self, command: *Command) !void {
+    try self.items.append(self.allocator, command);
 }
 
-pub fn findCommandByName(self: *const Self, name: []const u8) ?Command {
+pub fn findCommandByName(self: *const Self, name: []const u8) ?*Command {
     for (self.items.items) |cmd| {
         if (std.mem.eql(u8, cmd.name, name)) {
             return cmd;

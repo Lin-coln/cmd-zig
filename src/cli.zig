@@ -28,17 +28,19 @@ const RootCommand = struct {
     const Self = @This();
     allocator: Allocator,
     init: std.process.Init,
-    cmd: Command,
+    cmd: *Command,
 
     pub fn create(init: std.process.Init) !*Self {
         const allocator: Allocator = init.arena.allocator();
         const ptr = try allocator.create(Self);
         errdefer allocator.destroy(ptr);
 
-        ptr.* = .{
-            .allocator = allocator,
-            .init = init,
-            .cmd = .init(.{
+        const subcommands = try Command.Collection.create(allocator);
+        errdefer subcommands.release();
+
+        const cmd = try Command.create(
+            allocator,
+            .{
                 .name = "cli",
                 .desc =
                 \\this is my awesome multiline description.
@@ -48,7 +50,9 @@ const RootCommand = struct {
                 .options = &.{
                     .{ .key = "help", .alias = 'h', .parser = .bool },
                 },
-            }, .{
+            },
+            .{
+                .subcommands = subcommands,
                 .handlers = .init(ptr, struct {
                     pub fn handleExecute(c: *Self, ctx: *const Command.Context) void {
                         c.handleExecute(ctx) catch |err| {
@@ -56,14 +60,21 @@ const RootCommand = struct {
                         };
                     }
                 }),
-                .subcommands = try .create(allocator),
-            }),
+            },
+        );
+        errdefer cmd.destroy();
+
+        ptr.* = .{
+            .allocator = allocator,
+            .init = init,
+            .cmd = cmd,
         };
 
         return ptr;
     }
 
     pub fn destroy(self: *Self) void {
+        self.cmd.destroy();
         self.allocator.destroy(self);
     }
 

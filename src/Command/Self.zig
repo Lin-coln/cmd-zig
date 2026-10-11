@@ -1,18 +1,21 @@
 const std = @import("std");
 const Args = @import("../Args/Self.zig");
+const Allocator = std.mem.Allocator;
 
 pub const Context = @import("Context.zig");
 pub const Option = @import("Option.zig");
 pub const Collection = @import("Collection.zig");
 const Handlers = @import("Handlers.zig");
 const Self = @This();
+allocator: Allocator,
 name: []const u8,
 desc: ?[]const u8 = null,
 handlers: Handlers,
 options: ?[]const Option = null,
 subcommands: ?*Collection = null,
 
-pub fn init(
+pub fn create(
+    allocator: Allocator,
     comptime cfg: struct {
         name: []const u8,
         desc: ?[]const u8 = null,
@@ -22,45 +25,40 @@ pub fn init(
         handlers: Handlers,
         subcommands: ?*Collection = null,
     },
-) Self {
-    return .{
+) !*Self {
+    const self = try allocator.create(Self);
+
+    self.* = .{
+        .allocator = allocator,
         .name = cfg.name,
         .desc = cfg.desc,
         .options = cfg.options,
         .handlers = opts.handlers,
-        .subcommands = if (opts.subcommands) |collection|
-            collection.retain()
-        else
-            null,
+        .subcommands = opts.subcommands,
     };
+
+    return self;
 }
 
-pub fn deinit(self: *Self) void {
+pub fn destroy(self: *Self) void {
     if (self.subcommands) |collection| {
-        self.subcommands = null;
         collection.release();
     }
-}
 
-pub fn clone(self: *const Self) Self {
-    var next = self.*;
-    if (self.subcommands) |collection| {
-        next.subcommands = collection.retain();
-    }
-    return next;
+    self.allocator.destroy(self);
 }
 
 pub fn execute(self: *Self, ctx: *Context) !void {
     var idx: usize = 0;
-    while (idx < ctx.args.items.len) : (idx += 1) {
+
+    while (idx < ctx.args.items.len) {
         const desc = Args.parseDescriptorFromArg(ctx.args.items[idx].*);
 
         // update context options
         if (self.options) |opts| {
             if (Option.parseEntry(opts, desc)) |entry| {
-                _ = ctx.args.orderedRemove(idx);
                 try ctx.options.put(entry.opt.key, entry);
-                idx -= 1; // avoid idx out of range
+                _ = ctx.args.orderedRemove(idx);
                 continue;
             }
         }
@@ -73,19 +71,26 @@ pub fn execute(self: *Self, ctx: *Context) !void {
             }) |subcommand| {
                 const ctx_sub = try ctx.clone();
                 defer ctx_sub.destroy();
-                // rm cmd name
-                _ = ctx_sub.args.orderedRemove(idx);
-                // rest args belongs to sub command
+
+                // only args after command name belong to subcommand
+                const rest = ctx_sub.args.items[idx + 1 ..];
+                std.mem.copyForwards(
+                    *const []const u8,
+                    ctx_sub.args.items[0..rest.len],
+                    rest,
+                );
+                ctx_sub.args.items.len = rest.len;
+
+                // parent keeps args before subcommand
                 ctx.args.items.len = idx;
 
                 // todo: self.beforeCallSubcommand(ctx);
-                // call sub command
                 try subcommand.execute(ctx_sub);
-
-                // skip others when subcommand found.
                 return;
             }
         }
+
+        idx += 1;
     }
 
     self.handlers.callExecute(ctx);
