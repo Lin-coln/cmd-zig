@@ -17,29 +17,26 @@ pub fn main(init: std.process.Init) !void {
     defer root.destroy();
 
     const allocator: Allocator = init.arena.allocator();
-    const argv = try init.minimal.args.toSlice(allocator);
-    const ctx: *Command.Context = try .create(allocator, argv, .{});
-    defer ctx.destroy();
+    const args: []const []const u8 = try init.minimal.args.toSlice(allocator);
 
-    try root.cmd.execute(ctx);
+    try root.cmd.execute(.{
+        .allocator = allocator,
+        .args = args,
+    });
 }
 
 const RootCommand = struct {
     const Self = @This();
     allocator: Allocator,
     init: std.process.Init,
-    cmd: *Command,
+    cmd: Command,
 
     pub fn create(init: std.process.Init) !*Self {
         const allocator: Allocator = init.arena.allocator();
         const ptr = try allocator.create(Self);
         errdefer allocator.destroy(ptr);
 
-        const subcommands = try Command.Collection.create(allocator);
-        errdefer subcommands.release();
-
-        const cmd = try Command.create(
-            allocator,
+        const cmd = Command.init(
             .{
                 .name = "cli",
                 .desc =
@@ -52,9 +49,8 @@ const RootCommand = struct {
                 },
             },
             .{
-                .subcommands = subcommands,
-                .handlers = .init(ptr, struct {
-                    pub fn handleExecute(c: *Self, ctx: *const Command.Context) void {
+                .execute = .init(ptr, struct {
+                    pub fn handleExecute(c: *Self, ctx: Command.Context) void {
                         c.handleExecute(ctx) catch |err| {
                             std.log.err("handleExecute failed: {}", .{err});
                         };
@@ -62,7 +58,6 @@ const RootCommand = struct {
                 }),
             },
         );
-        errdefer cmd.destroy();
 
         ptr.* = .{
             .allocator = allocator,
@@ -74,21 +69,20 @@ const RootCommand = struct {
     }
 
     pub fn destroy(self: *Self) void {
-        self.cmd.destroy();
         self.allocator.destroy(self);
     }
 
-    pub fn handleExecute(_: *Self, ctx: *const Command.Context) !void {
-        for (ctx.args.items) |arg| {
-            std.log.info("{s}", .{arg.*});
+    pub fn handleExecute(_: *Self, ctx: Command.Context) !void {
+        for (ctx.args) |arg| {
+            std.log.info("{s}", .{arg});
         }
 
-        var iter = ctx.options.iterator();
-        while (iter.next()) |entry| {
-            std.log.info("option: {s}={s}\n", .{
-                entry.key_ptr.*,
-                entry.value_ptr.*.value orelse "(null)",
-            });
-        }
+        // var iter = ctx.options.iterator();
+        // while (iter.next()) |entry| {
+        //     std.log.info("option: {s}={s}\n", .{
+        //         entry.key_ptr.*,
+        //         entry.value_ptr.*.value orelse "(null)",
+        //     });
+        // }
     }
 };

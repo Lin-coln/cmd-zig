@@ -2,96 +2,64 @@ const std = @import("std");
 const Args = @import("../Args/Self.zig");
 const Allocator = std.mem.Allocator;
 
-pub const Context = @import("Context.zig");
+pub const Context = @import("Handler/Self.zig").Context;
 pub const Option = @import("Option.zig");
-pub const Collection = @import("Collection.zig");
-const Handlers = @import("Handlers.zig");
+const Handler = @import("Handler/Self.zig").Handler;
 const Self = @This();
-allocator: Allocator,
 name: []const u8,
 desc: ?[]const u8 = null,
-handlers: Handlers,
+handler: Handler,
 options: ?[]const Option = null,
-subcommands: ?*Collection = null,
 
-pub fn create(
-    allocator: Allocator,
+pub fn init(
     comptime cfg: struct {
         name: []const u8,
         desc: ?[]const u8 = null,
         options: ?[]const Option = null,
     },
-    opts: struct {
-        handlers: Handlers,
-        subcommands: ?*Collection = null,
-    },
-) !*Self {
-    const self = try allocator.create(Self);
-
-    self.* = .{
-        .allocator = allocator,
+    handler: Handler,
+) Self {
+    return .{
         .name = cfg.name,
         .desc = cfg.desc,
         .options = cfg.options,
-        .handlers = opts.handlers,
-        .subcommands = opts.subcommands,
+        .handler = handler,
     };
-
-    return self;
 }
 
-pub fn destroy(self: *Self) void {
-    if (self.subcommands) |collection| {
-        collection.release();
-    }
+pub fn execute(self: Self, ctx: Context) !void {
+    switch (self.handler) {
+        .execute => |handler| {
+            handler.vt.handleExecute(handler.ptr, ctx);
+        },
 
-    self.allocator.destroy(self);
-}
+        .subcommands => |handler| {
+            var idx: usize = 0;
+            while (idx < ctx.args.len) {
+                const desc = Args.parseDescriptorFromArg(ctx.args[idx]);
 
-pub fn execute(self: *Self, ctx: *Context) !void {
-    var idx: usize = 0;
+                if (switch (desc) {
+                    .unknown => |str| handler.vt.handleFindSubcommand(handler.ptr, str),
+                    else => null,
+                }) |subcommand| {
+                    const ctx_cur: Context = .{
+                        .allocator = ctx.allocator,
+                        .args = ctx.args[0..idx],
+                    };
+                    const ctx_sub: Context = .{
+                        .allocator = ctx.allocator,
+                        .args = ctx.args[idx..],
+                    };
+                    handler.vt.handleBeforeExecuteSubcommand(handler.ptr, ctx_cur);
+                    try subcommand.execute(ctx_sub);
+                    return;
+                }
 
-    while (idx < ctx.args.items.len) {
-        const desc = Args.parseDescriptorFromArg(ctx.args.items[idx].*);
-
-        // update context options
-        if (self.options) |opts| {
-            if (Option.parseEntry(opts, desc)) |entry| {
-                try ctx.options.put(entry.opt.key, entry);
-                _ = ctx.args.orderedRemove(idx);
-                continue;
+                idx += 1;
             }
-        }
 
-        // subcommands
-        if (self.subcommands) |sub| {
-            if (switch (desc) {
-                .unknown => |str| sub.findCommandByName(str),
-                else => null,
-            }) |subcommand| {
-                const ctx_sub = try ctx.clone();
-                defer ctx_sub.destroy();
-
-                // only args after command name belong to subcommand
-                const rest = ctx_sub.args.items[idx + 1 ..];
-                std.mem.copyForwards(
-                    *const []const u8,
-                    ctx_sub.args.items[0..rest.len],
-                    rest,
-                );
-                ctx_sub.args.items.len = rest.len;
-
-                // parent keeps args before subcommand
-                ctx.args.items.len = idx;
-
-                // todo: self.beforeCallSubcommand(ctx);
-                try subcommand.execute(ctx_sub);
-                return;
-            }
-        }
-
-        idx += 1;
+            // subcommand no found
+            handler.vt.handleExecute(handler.ptr, ctx);
+        },
     }
-
-    self.handlers.callExecute(ctx);
 }
