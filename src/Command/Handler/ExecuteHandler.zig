@@ -1,5 +1,5 @@
 const VT = @import("../../utils/VT.zig");
-const Context = @import("Context.zig");
+const Context = @import("../Context.zig");
 
 pub const VTable = struct {
     handleExecute: *const fn (ptr: *anyopaque, ctx: Context) void,

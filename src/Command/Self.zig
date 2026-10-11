@@ -2,7 +2,7 @@ const std = @import("std");
 const Args = @import("../Args/Self.zig");
 const Allocator = std.mem.Allocator;
 
-pub const Context = @import("Handler/Self.zig").Context;
+pub const Context = @import("Context.zig");
 pub const Option = @import("Option.zig");
 const Handler = @import("Handler/Self.zig").Handler;
 const Self = @This();

@@ -1,6 +1,6 @@
 const std = @import("std");
 const VT = @import("../../utils/VT.zig");
-const Context = @import("Context.zig");
+const Context = @import("../Context.zig");
 const Command = @import("../../Command/Self.zig");
 
 pub const VTable = struct {
