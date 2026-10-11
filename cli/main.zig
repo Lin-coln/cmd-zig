@@ -72,17 +72,42 @@ const RootCommand = struct {
         self.allocator.destroy(self);
     }
 
-    pub fn handleExecute(_: *Self, ctx: Command.Context) !void {
-        for (ctx.args) |arg| {
+    pub fn handleExecute(self: *Self, ctx: Command.Context) !void {
+        const cmd = self.cmd;
+
+        const args, const opts = blk: {
+            var args: std.ArrayList([]const u8) = .empty;
+            defer args.deinit(self.allocator);
+            var options: std.ArrayList(Command.Option.Entry) = .empty;
+            defer options.deinit(self.allocator);
+
+            for (ctx.args) |arg| {
+                const desc = Args.parseDescriptorFromArg(arg);
+                if (cmd.options) |opts| {
+                    if (Command.Option.parseEntry(opts, desc)) |entry| {
+                        try options.append(self.allocator, entry);
+                        continue;
+                    }
+                }
+                try args.append(self.allocator, arg);
+            }
+
+            const owned_args = try args.toOwnedSlice(self.allocator);
+            errdefer self.allocator.free(owned_args);
+            const owned_options = try options.toOwnedSlice(self.allocator);
+            errdefer self.allocator.free(owned_options);
+            break :blk .{ owned_args, owned_options };
+        };
+
+        for (args) |arg| {
             std.log.info("{s}", .{arg});
         }
 
-        // var iter = ctx.options.iterator();
-        // while (iter.next()) |entry| {
-        //     std.log.info("option: {s}={s}\n", .{
-        //         entry.key_ptr.*,
-        //         entry.value_ptr.*.value orelse "(null)",
-        //     });
-        // }
+        for (opts) |opt| {
+            std.log.info("option: {s}={s}\n", .{
+                opt.opt.key,
+                opt.value orelse "(null)",
+            });
+        }
     }
 };
