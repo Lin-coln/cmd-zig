@@ -1,4 +1,5 @@
 const std = @import("std");
+const Command = @import("Self.zig");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
 
@@ -6,27 +7,29 @@ const Self = @This();
 allocator: Allocator,
 argv: []const [:0]const u8,
 args: std.ArrayList(*const []const u8),
-options: std.StringHashMap(?[]const u8),
+options: std.StringHashMap(Command.Option.Entry),
 
 pub fn create(
     allocator: Allocator,
     argv: []const [:0]const u8,
-    args_brw: ?std.ArrayList(*const []const u8),
+    extra: struct {
+        args: ?[]*const []const u8 = null,
+    },
 ) !*Self {
     const ptr = try allocator.create(Self);
     errdefer allocator.destroy(ptr);
 
     var args: std.ArrayList(*const []const u8) = .empty;
     errdefer args.deinit(allocator);
-    if (args_brw) |brw| {
-        try args.appendSlice(allocator, brw.items);
+    if (extra.args) |slice| {
+        try args.appendSlice(allocator, slice);
     } else {
         for (argv[1..]) |*arg| {
             try args.append(allocator, arg);
         }
     }
 
-    const options = std.StringHashMap(?[]const u8).init(allocator);
+    const options = std.StringHashMap(Command.Option.Entry).init(allocator);
     errdefer options.deinit();
 
     ptr.* = .{
@@ -45,5 +48,5 @@ pub fn destroy(self: *Self) void {
 }
 
 pub fn clone(self: *const Self) !*Self {
-    return try .create(self.allocator, self.argv, self.args);
+    return try .create(self.allocator, self.argv, .{ .args = self.args.items });
 }

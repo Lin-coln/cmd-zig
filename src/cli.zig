@@ -18,18 +18,16 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator: Allocator = init.arena.allocator();
     const argv = try init.minimal.args.toSlice(allocator);
-    const ctx: *Command.Context = try .create(allocator, argv, null);
+    const ctx: *Command.Context = try .create(allocator, argv, .{});
     defer ctx.destroy();
+
     for (ctx.args.items, 0..) |arg, idx| {
-        switch (Args.Descriptor.initFromSlice(arg.*)) {
-            .option => |desc| {
-                const opts = root.cmd.options orelse continue;
-                const opt = desc.findOption(opts) orelse continue;
-                _ = ctx.args.orderedRemove(idx);
-                try ctx.options.put(opt.key, desc.value);
-            },
-            else => continue,
-        }
+        const desc = Args.parseDescriptorFromArg(arg.*);
+
+        const opts = root.cmd.options orelse continue;
+        const entry = Command.Option.parseEntry(opts, desc) orelse continue;
+        _ = ctx.args.orderedRemove(idx);
+        try ctx.options.put(entry.opt.key, entry);
     }
 
     root.cmd.callExecute(ctx);
@@ -78,15 +76,15 @@ const RootCommand = struct {
     }
 
     pub fn handleExecute(_: *Self, ctx: *const Command.Context) !void {
-        var iter = ctx.options.iterator();
         for (ctx.args.items) |arg| {
             std.log.info("{s}", .{arg.*});
         }
 
+        var iter = ctx.options.iterator();
         while (iter.next()) |entry| {
             std.log.info("option: {s}={s}\n", .{
                 entry.key_ptr.*,
-                entry.value_ptr.* orelse "(null)",
+                entry.value_ptr.*.value orelse "(null)",
             });
         }
     }
