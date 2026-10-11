@@ -21,16 +21,7 @@ pub fn main(init: std.process.Init) !void {
     const ctx: *Command.Context = try .create(allocator, argv, .{});
     defer ctx.destroy();
 
-    for (ctx.args.items, 0..) |arg, idx| {
-        const desc = Args.parseDescriptorFromArg(arg.*);
-
-        const opts = root.cmd.options orelse continue;
-        const entry = Command.Option.parseEntry(opts, desc) orelse continue;
-        _ = ctx.args.orderedRemove(idx);
-        try ctx.options.put(entry.opt.key, entry);
-    }
-
-    root.cmd.callExecute(ctx);
+    try root.cmd.execute(ctx);
 }
 
 const RootCommand = struct {
