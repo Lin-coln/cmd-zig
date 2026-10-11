@@ -56,6 +56,7 @@ const RootCommand = struct {
                         };
                     }
                 }),
+                .subcommands = try .create(allocator),
             }),
         };
 
