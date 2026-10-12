@@ -6,8 +6,8 @@ const Manifest = Self.Manifest;
 
 pub const VTable = struct {
     onExecute: *const fn (ptr: *anyopaque, ctx: Context) anyerror!void,
-    queryManifests: ?*const fn (*anyopaque, Context) []const Manifest = null,
-    queryEntry: ?*const fn (*anyopaque, Context, []const u8) ?Self = null,
+    querySubManifests: ?*const fn (*anyopaque, Context) []const Manifest = null,
+    querySubCommand: ?*const fn (*anyopaque, Context, []const u8) ?Self = null,
 };
 
 pub fn init(
@@ -56,8 +56,8 @@ pub fn init(
     const Static = struct {
         const vt: VTable = .{
             .onExecute = onExecute,
-            .queryManifests = if (@hasDecl(Impls, "queryManifests")) FnCast(Impls.queryManifests) else null,
-            .queryEntry = if (@hasDecl(Impls, "queryEntry")) FnCast(Impls.queryEntry) else null,
+            .querySubManifests = if (@hasDecl(Impls, "querySubManifests")) FnCast(Impls.querySubManifests) else null,
+            .querySubCommand = if (@hasDecl(Impls, "querySubCommand")) FnCast(Impls.querySubCommand) else null,
         };
         fn FnCast(comptime Fn: anytype) *const VT.NewFn(@TypeOf(Fn), *anyopaque, null) {
             return @ptrCast(&Fn);
