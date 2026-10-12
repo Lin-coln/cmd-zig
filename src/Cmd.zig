@@ -3,8 +3,17 @@ const VT = @import("./utils/VT.zig");
 const Allocator = std.mem.Allocator;
 
 pub const Context = struct {
+    const Self = @This();
     allocator: Allocator,
     args: []const []const u8,
+    pub fn slice(self: Self, idx: union(enum) { start: usize, end: usize }) Self {
+        const res = self;
+        res.args = switch (idx) {
+            .start => |i| res.args[i..],
+            .end => |i| res.args[0..i],
+        };
+        return res;
+    }
 };
 
 pub const Manifest = struct {
@@ -30,14 +39,11 @@ pub const Entry = struct {
     vt: *const VTable,
     manifest: Manifest,
     const VTable = struct {
-        onLoadHandler: *const fn (ptr: *anyopaque) Handler,
+        onExecute: *const fn (ptr: *anyopaque, ctx: Context) anyerror!void,
+        queryManifests: ?*const fn (*anyopaque, Context) []const Manifest = null,
+        queryEntry: ?*const fn (*anyopaque, Context, []const u8) ?Entry = null,
     };
-    pub fn loadHandler(self: Self) Handler {
-        return try self.vt.onLoadHandler(self.ptr);
-    }
 
-    // queryManifests: ?*const fn (ctx: Context) []const Manifest = null,
-    // queryEntry: ?*const fn (ctx: Context, name: []const u8) ?Entry = null,
     pub fn init(
         typed: anytype,
         manifest: Manifest,
@@ -45,15 +51,32 @@ pub const Entry = struct {
     ) Self {
         const Typed = @typeInfo(@TypeOf(typed)).pointer.child;
 
-        // comptime validate
         inline for (@typeInfo(VTable).@"struct".fields) |field| {
+            const optional = @typeInfo(field.type) == .optional;
             if (!@hasDecl(Impls, field.name)) {
+                if (optional) continue;
                 @compileError(@typeName(Impls) ++ " needs " ++ field.name);
             }
 
-            const fn_ptr = @typeInfo(field.type).pointer;
+            const ptr_type = if (optional)
+                @typeInfo(field.type).optional.child
+            else
+                field.type;
+
+            const fn_ptr = @typeInfo(ptr_type).pointer;
             const Actual = @TypeOf(@field(Impls, field.name));
-            const Expected = VT.NewFn(fn_ptr.child, *Typed, null);
+            const Expected =
+                //
+                if (std.mem.eql(u8, field.name, "onExecute")) {
+                    const ActualReturn = @typeInfo(Actual).@"fn".return_type.?;
+                    const ExpectedReturn = switch (@typeInfo(ActualReturn)) {
+                        .error_union => |info| info.error_set!void,
+                        else => void,
+                    };
+                    return VT.NewFn(fn_ptr.child, *Typed, ExpectedReturn);
+                } else {
+                    return VT.NewFn(fn_ptr.child, *Typed, null);
+                };
             if (Actual != Expected) {
                 @compileError(@typeName(Impls) ++ "." ++ field.name ++ " must be " ++ @typeName(Expected));
             }
@@ -61,10 +84,16 @@ pub const Entry = struct {
 
         const Static = struct {
             const vt: VTable = .{
-                .onLoadHandler = FnCast(Impls.onLoadHandler),
+                .onExecute = onExecute,
+                .queryManifests = if (@hasDecl(Impls, "queryManifests")) FnCast(Impls.queryManifests) else null,
+                .queryEntry = if (@hasDecl(Impls, "queryEntry")) FnCast(Impls.queryEntry) else null,
             };
             fn FnCast(comptime Fn: anytype) *const VT.NewFn(@TypeOf(Fn), *anyopaque, null) {
                 return @ptrCast(&Fn);
+            }
+            fn onExecute(ptr: *anyopaque, ctx: Context) anyerror!void {
+                const self: *Typed = @ptrCast(@alignCast(ptr));
+                return Impls.onExecute(self, ctx);
             }
         };
 
@@ -74,23 +103,42 @@ pub const Entry = struct {
             .vt = &Static.vt,
         };
     }
+
+    pub fn invokeExecute(self: Self, ctx: Context) anyerror!void {
+        return try self.vt.onExecute(self.ptr, ctx);
+    }
+
+    pub fn resolveNextEntry(self: Entry, ctx: Context) ?struct { entry: Entry, idx: usize } {
+        for (ctx.args, 0..) |arg, idx| {
+            if (std.mem.eql(u8, arg, "--")) break;
+            const entry = self.queryEntry(ctx, arg) orelse continue;
+            return .{ .entry = entry, .idx = idx };
+        }
+        return null;
+    }
+
+    pub fn loadHandler(self: Self) Handler {
+        return self.vt.onLoadHandler(self.ptr);
+    }
+
+    fn queryManifests(self: Self, ctx: Context) ?[]const Manifest {
+        const f = self.vt.queryManifests orelse return null;
+        return f(self.ptr, ctx);
+    }
+
+    fn queryEntry(self: Self, ctx: Context, name: []const u8) ?Entry {
+        const f = self.vt.queryEntry orelse return null;
+        return f(self.ptr, ctx, name);
+    }
 };
 
 pub fn executeEntry(entry: Entry, ctx: Context) !void {
-    const handler = entry.loadHandler();
-    return try handler.invokeExecute(ctx);
-}
+    const next = entry.resolveNextEntry(ctx);
 
-const Root = struct {
-    const Self = @This();
-
-    pub fn asEntry(ptr: *Self) Entry {
-        return .init(ptr, .{
-            .name = "root",
-        }, struct {
-            pub fn onLoadHandler(self: *Self) Handler {
-                // todo
-            }
-        });
+    if (next) |sub| {
+        try executeEntry(entry, ctx.slice(.{ .end = sub.idx }));
+        try executeEntry(sub.entry, ctx.slice(.{ .start = sub.idx }));
+    } else {
+        return try entry.invokeExecute(ctx);
     }
-};
+}
