@@ -9,7 +9,7 @@ pub const Context = struct {
 
 pub const Manifest = struct {
     name: []const u8,
-    desc: ?[]const u8,
+    desc: ?[]const u8 = null,
 };
 
 pub const Handler = struct {
@@ -40,9 +40,7 @@ pub const Entry = struct {
     // queryEntry: ?*const fn (ctx: Context, name: []const u8) ?Entry = null,
     pub fn init(
         typed: anytype,
-        opts: struct {
-            manifest: Manifest,
-        },
+        manifest: Manifest,
         comptime Impls: type,
     ) Self {
         const Typed = @typeInfo(@TypeOf(typed)).pointer.child;
@@ -71,7 +69,7 @@ pub const Entry = struct {
         };
 
         return .{
-            .manifest = opts.manifest,
+            .manifest = manifest,
             .ptr = @ptrCast(typed),
             .vt = &Static.vt,
         };
@@ -86,15 +84,13 @@ pub fn executeEntry(entry: Entry, ctx: Context) !void {
 const Root = struct {
     const Self = @This();
 
-    pub fn asEntry(self: Self) Entry {
-        return .init(self, .{
-            .manifest = .{ .name = "root" },
+    pub fn asEntry(ptr: *Self) Entry {
+        return .init(ptr, .{
+            .name = "root",
         }, struct {
-            pub const onLoadHandler = Self.onLoadHandler;
+            pub fn onLoadHandler(self: *Self) Handler {
+                // todo
+            }
         });
-    }
-
-    fn onLoadHandler(self: Self) Handler {
-        // todo
     }
 };
