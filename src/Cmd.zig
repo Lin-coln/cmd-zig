@@ -7,12 +7,13 @@ pub const Context = struct {
     allocator: Allocator,
     args: []const []const u8,
     pub fn slice(self: Self, idx: union(enum) { start: usize, end: usize }) Self {
-        const res = self;
-        res.args = switch (idx) {
-            .start => |i| res.args[i..],
-            .end => |i| res.args[0..i],
+        return .{
+            .allocator = self.allocator,
+            .args = switch (idx) {
+                .start => |i| self.args[i..],
+                .end => |i| self.args[0..i],
+            },
         };
-        return res;
     }
 };
 
@@ -65,18 +66,23 @@ pub const Entry = struct {
 
             const fn_ptr = @typeInfo(ptr_type).pointer;
             const Actual = @TypeOf(@field(Impls, field.name));
-            const Expected =
-                //
-                if (std.mem.eql(u8, field.name, "onExecute")) {
+
+            const Expected = VT.NewFn(
+                fn_ptr.child,
+                *Typed,
+                // onExecute
+                if (comptime std.mem.eql(u8, field.name, "onExecute")) blk: {
                     const ActualReturn = @typeInfo(Actual).@"fn".return_type.?;
                     const ExpectedReturn = switch (@typeInfo(ActualReturn)) {
                         .error_union => |info| info.error_set!void,
                         else => void,
                     };
-                    return VT.NewFn(fn_ptr.child, *Typed, ExpectedReturn);
-                } else {
-                    return VT.NewFn(fn_ptr.child, *Typed, null);
-                };
+                    break :blk ExpectedReturn;
+                }
+                // default
+                else null,
+            );
+
             if (Actual != Expected) {
                 @compileError(@typeName(Impls) ++ "." ++ field.name ++ " must be " ++ @typeName(Expected));
             }
@@ -134,7 +140,6 @@ pub const Entry = struct {
 
 pub fn executeEntry(entry: Entry, ctx: Context) !void {
     const next = entry.resolveNextEntry(ctx);
-
     if (next) |sub| {
         try executeEntry(entry, ctx.slice(.{ .end = sub.idx }));
         try executeEntry(sub.entry, ctx.slice(.{ .start = sub.idx }));
