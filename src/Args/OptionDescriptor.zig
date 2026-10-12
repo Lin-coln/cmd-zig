@@ -1,9 +1,7 @@
 const std = @import("std");
 
-pub const Identity = union(enum) {
-    key: []const u8,
-    alias: u8,
-};
+const Identity = union(enum) { key: []const u8, alias: u8 };
+
 const Self = @This();
 identity: Identity,
 value: ?[]const u8 = null,
@@ -28,14 +26,13 @@ pub fn parseFromArg(arg: []const u8) ?Self {
     const name = if (idx) |i| current[0..i] else current;
     const value = if (idx) |i| current[i + 1 ..] else null;
 
-    // -=, --, --=
-    if (name.len == 0) return null;
-
     switch (opt_id) {
         .key => |*id| {
+            if (name.len == 0) return null;
             id.* = name;
         },
         .alias => |*id| {
+            if (name.len != 1) return null;
             id.* = name[0];
         },
     }
