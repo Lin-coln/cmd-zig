@@ -14,17 +14,16 @@ pub fn main(init: std.process.Init) !void {
 
     const allocator: Allocator = init.arena.allocator();
 
+    const args: []const []const u8 = try init.minimal.args.toSlice(allocator);
+    defer allocator.free(args);
+
     const root = try Root.create(allocator);
     defer root.destroy();
 
-    const args: []const []const u8 = try init.minimal.args.toSlice(allocator);
-
-    root.asCommand().execute(
-        .{
-            .allocator = allocator,
-            .args = args,
-        },
-    ) catch |err| {
+    root.asCommand().execute(.{
+        .allocator = allocator,
+        .args = args,
+    }) catch |err| {
         std.log.err("executeEntry failed: {}", .{err});
     };
 }
