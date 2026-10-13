@@ -1,5 +1,4 @@
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 const Args = @import("../Args/Self.zig");
 
 pub const Type = std.meta.Tag(Value);

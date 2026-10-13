@@ -1,10 +1,7 @@
 const std = @import("std");
-const VT = @import("../utils/VT.zig");
 const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
-const Manifest = Self.Manifest;
-const Option = Self.Option;
 const OptionRecord = Self.OptionRecord;
 
 pub fn execute(self: Self, ctx: Context) !void {

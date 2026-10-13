@@ -1,5 +1,4 @@
 const std = @import("std");
-const Option = @import("Option.zig");
 const Allocator = std.mem.Allocator;
 
 const Self = @This();

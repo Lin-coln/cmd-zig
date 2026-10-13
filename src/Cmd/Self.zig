@@ -1,6 +1,3 @@
-const std = @import("std");
-const Args = @import("../Args/Self.zig");
-
 pub const Context = @import("Context.zig");
 pub const Option = @import("Option.zig");
 pub const OptionRecord = @import("OptionRecord.zig");

@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const mod = @import("mod");
-const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const Cmd = mod.Cmd;
 
 extern "kernel32" fn SetConsoleOutputCP(code_page: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
