@@ -25,18 +25,7 @@ pub const Manifest = struct {
 
     pub fn queryOption(self: Manifest, desc: Args.OptionDescriptor) ?*const Option {
         const opts = self.options orelse return null;
-        for (opts) |*opt| {
-            switch (desc.identity) {
-                .key => |key| {
-                    if (std.mem.eql(u8, opt.key, key)) return opt;
-                },
-                .alias => |alias| {
-                    if (opt.alias) |a| {
-                        if (a == alias) return opt;
-                    }
-                },
-            }
-        }
+        for (opts) |*opt| if (opt.match(desc)) opt else null;
         return null;
     }
 };

@@ -15,6 +15,16 @@ desc: ?[]const u8 = null,
 type: Type = .string,
 required: bool = false,
 
+pub fn match(self: *const Self, desc: Args.OptionDescriptor) bool {
+    switch (desc.identity) {
+        .key => |x| return std.mem.eql(u8, self.key, x),
+        .alias => |x| {
+            const alias = self.alias orelse return false;
+            return alias == x;
+        },
+    }
+}
+
 pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
     switch (self.type) {
         .string => return .{ .string = desc.value orelse "" },

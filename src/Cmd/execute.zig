@@ -22,6 +22,7 @@ pub fn execute(self: Self, ctx: Context) !void {
 
     var args_ls: std.ArrayList([]const u8) = .empty;
     defer args_ls.deinit(allocator);
+
     var after_double_dash: bool = false;
     for (ctx.args) |arg| {
         const desc: Args.Descriptor = if (after_double_dash)
@@ -34,16 +35,24 @@ pub fn execute(self: Self, ctx: Context) !void {
                 continue;
             },
             .option => |d| {
-                if (self.manifest.queryOption(d)) |opt| {
+                const option = blk: {
+                    const options = self.manifest.options orelse break :blk null;
+                    for (options) |*opt| if (opt.match(d)) break :blk opt;
+                    break :blk null;
+                };
+                if (option) |opt| {
                     try opts.set(opt.key, try opt.parse(d));
-                } else {
-                    try args_ls.append(allocator, arg);
+                    continue;
                 }
             },
             .unknown => |str| {
                 try args_ls.append(allocator, str);
+                continue;
             },
         }
+
+        // cannot be parsed, as arg
+        try args_ls.append(allocator, arg);
     }
 
     const args = try args_ls.toOwnedSlice(allocator);
