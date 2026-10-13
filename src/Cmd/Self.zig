@@ -3,6 +3,7 @@ const Args = @import("../Args/Self.zig");
 
 pub const Context = @import("Context.zig");
 pub const Option = @import("Option.zig");
+pub const OptionRecord = @import("OptionRecord.zig");
 
 const Self = @This();
 ptr: *anyopaque,

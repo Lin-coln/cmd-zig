@@ -5,6 +5,7 @@ const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
 const Option = Self.Option;
+const OptionRecord = Self.OptionRecord;
 
 pub fn execute(self: Self, ctx: Context) !void {
     const next = resolveNextEntry(self, ctx);
@@ -16,7 +17,7 @@ pub fn execute(self: Self, ctx: Context) !void {
 
     const allocator = ctx.allocator;
 
-    var opts: *Option.Record = try .create(allocator);
+    var opts: *OptionRecord = try .create(allocator);
     defer opts.deinit();
 
     var args_ls: std.ArrayList([]const u8) = .empty;

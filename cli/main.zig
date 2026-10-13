@@ -52,7 +52,7 @@ const Root = struct {
                 .{ .key = "help", .alias = 'h', .type = .boolean },
             },
         }, struct {
-            pub fn onExecute(self: *Self, ctx: Cmd.Context, opts: *const Cmd.Option.Record) !void {
+            pub fn onExecute(self: *Self, ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
                 _ = self;
                 for (ctx.args) |arg| {
                     std.log.info("{s}", .{arg});
