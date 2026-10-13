@@ -3,9 +3,10 @@ const VT = @import("../utils/VT.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
+const Option = Self.Option;
 
 pub const VTable = struct {
-    onExecute: *const fn (ptr: *anyopaque, ctx: Context) anyerror!void,
+    onExecute: *const fn (*anyopaque, Context, *const Option.Record) anyerror!void,
     querySubManifests: ?*const fn (*anyopaque, Context) []const Manifest = null,
     querySubCommand: ?*const fn (*anyopaque, Context, []const u8) ?Self = null,
 };
@@ -62,9 +63,9 @@ pub fn init(
         fn FnCast(comptime Fn: anytype) *const VT.NewFn(@TypeOf(Fn), *anyopaque, null) {
             return @ptrCast(&Fn);
         }
-        fn onExecute(ptr: *anyopaque, ctx: Context) anyerror!void {
+        fn onExecute(ptr: *anyopaque, ctx: Context, opts: *const Option.Record) anyerror!void {
             const self: *Typed = @ptrCast(@alignCast(ptr));
-            return Impls.onExecute(self, ctx);
+            return Impls.onExecute(self, ctx, opts);
         }
     };
 
