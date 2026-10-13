@@ -6,12 +6,15 @@ const Self = @This();
 allocator: Allocator,
 args: []const []const u8,
 
-pub fn slice(self: Self, idx: union(enum) { start: usize, end: usize }) Self {
+pub fn split(self: Self, idx: usize) struct { Self, Self } {
     return .{
-        .allocator = self.allocator,
-        .args = switch (idx) {
-            .start => |i| self.args[i..],
-            .end => |i| self.args[0..i],
+        .{
+            .allocator = self.allocator,
+            .args = self.args[0..idx],
+        },
+        .{
+            .allocator = self.allocator,
+            .args = self.args[idx..],
         },
     };
 }

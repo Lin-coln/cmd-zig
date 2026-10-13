@@ -10,8 +10,9 @@ const OptionRecord = Self.OptionRecord;
 pub fn execute(self: Self, ctx: Context) !void {
     const next = resolveNextEntry(self, ctx);
     if (next) |sub| {
-        try self.execute(ctx.slice(.{ .end = sub.idx }));
-        try sub.cmd.execute(ctx.slice(.{ .start = sub.idx }));
+        const ctx1, const ctx2 = ctx.split(sub.idx);
+        try self.execute(ctx1);
+        try sub.cmd.execute(ctx2);
         return;
     }
 
