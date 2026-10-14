@@ -3,6 +3,7 @@ const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
+const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
 pub const VTable = struct {
@@ -86,14 +87,14 @@ test "init forwards stateless subcommand and manifest queries through the vtable
     const child = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "child",
-            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+            .options = &.{Option.boolean("-h, --help")},
         };
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "root",
-            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+            .options = &.{Option.boolean("-h, --help")},
         };
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {

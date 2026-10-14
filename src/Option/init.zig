@@ -129,8 +129,7 @@ test "int float and boolean constructors parse names and set their types" {
 }
 
 test "def sets or clears a matching default without changing the type" {
-    var base = Self.init("--count=<val>");
-    base.type = .int;
+    const base = Self.int("--count=<val>");
     const configured = base.def(.{ .int = 5 });
     try t.expectEqualDeep(Value{ .int = 5 }, configured.default.?);
     try t.expectEqual(Type.int, configured.type);

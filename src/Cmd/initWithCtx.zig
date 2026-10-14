@@ -3,6 +3,7 @@ const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
+const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
 const init = @import("init.zig").init;
@@ -50,7 +51,7 @@ test "initWithCtx binds each instance to its own state and shares the vtable" {
     var a = struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "root",
-            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+            .options = &.{Option.boolean("-h, --help")},
         };
         executions: usize = 0,
         arg_count: usize = 0,

@@ -40,24 +40,24 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
 }
 
 test "match accepts matching keys and aliases and rejects other identities" {
-    const option: Self = .{ .key = "verbose", .alias = 'v' };
+    const option = Self.boolean("-v, --verbose");
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("-v").?));
     try t.expect(!option.match(Args.OptionDescriptor.parseFromArg("--other").?));
     try t.expect(!option.match(Args.OptionDescriptor.parseFromArg("-x").?));
-    const without_alias: Self = .{ .key = "verbose" };
+    const without_alias = Self.boolean("--verbose");
     try t.expect(!without_alias.match(Args.OptionDescriptor.parseFromArg("-v").?));
 }
 
 test "Option.parse handles absent values and delegates present values to Value.parse" {
-    const flag: Self = .{ .key = "verbose", .type = .boolean };
+    const flag = Self.boolean("--verbose");
     try t.expectEqualDeep(Value{ .boolean = true }, try flag.parse(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expectError(error.InvalidOptionValueFound, flag.parse(Args.OptionDescriptor.parseFromArg("--verbose=").?));
 
-    const output: Self = .{ .key = "output" };
+    const output = Self.init("--output=<val>");
     try t.expectEqualDeep(Value{ .string = "" }, try output.parse(Args.OptionDescriptor.parseFromArg("--output").?));
 
-    const count: Self = .{ .key = "count", .type = .int };
+    const count = Self.int("--count=<val>");
     try t.expectEqualDeep(Value{ .int = -2 }, try count.parse(Args.OptionDescriptor.parseFromArg("--count=-2").?));
     try t.expectError(error.InvalidOptionValueFound, count.parse(Args.OptionDescriptor.parseFromArg("--count").?));
 }

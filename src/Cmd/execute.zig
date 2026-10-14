@@ -4,6 +4,7 @@ const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
+const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
 pub fn execute(self: Self, ctx: Context) !void {
@@ -98,7 +99,7 @@ test "execute parses declared options and passes through other arguments" {
     var handler = struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "run",
-            .options = &.{.{ .key = "verbose", .alias = 'v', .type = .boolean }},
+            .options = &.{Option.boolean("-v, --verbose")},
         };
         calls: usize = 0,
         pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const OptionRecord) !void {
@@ -124,7 +125,7 @@ test "execute returns an error for an invalid value of a declared option" {
     const cmd = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "run",
-            .options = &.{.{ .key = "verbose", .type = .boolean }},
+            .options = &.{Option.boolean("--verbose")},
         };
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {
             return error.UnexpectedExecution;
@@ -140,8 +141,8 @@ test "checkOptions rejects a missing required option" {
     const manifest: Manifest = .{
         .name = "run",
         .options = &.{
-            .{ .key = "verbose", .type = .boolean },
-            .{ .key = "output", .required = true },
+            Option.boolean("--verbose"),
+            Option.init("--output=<val>").with(.{ .required = true }),
         },
     };
     const opts = try OptionRecord.create(t.allocator);
@@ -156,7 +157,7 @@ test "checkOptions rejects a missing required option" {
 test "checkOptions fills a default without replacing a stored option" {
     const manifest: Manifest = .{
         .name = "run",
-        .options = &.{.{ .key = "count", .type = .int, .required = true, .default = .{ .int = 5 } }},
+        .options = &.{Option.int("--count=<val>").with(.{ .required = true }).def(.{ .int = 5 })},
     };
     const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
