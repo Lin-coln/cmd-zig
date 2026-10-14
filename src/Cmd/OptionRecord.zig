@@ -57,7 +57,7 @@ const value_cases = .{
     .{ .key = "quiet", .value = Option.Value{ .boolean = false }, .expected = @as(bool, false), .arg = "--quiet=false" },
     .{ .key = "output", .value = Option.Value{ .string = "file.txt" }, .expected = @as([]const u8, "file.txt"), .arg = "--output=file.txt" },
     .{ .key = "empty", .value = Option.Value{ .string = "" }, .expected = @as([]const u8, ""), .arg = "--empty=" },
-    .{ .key = "count", .value = Option.Value{ .int = 42 }, .expected = @as(usize, 42), .arg = "--count=42" },
+    .{ .key = "count", .value = Option.Value{ .int = -42 }, .expected = @as(i64, -42), .arg = "--count=-42" },
     .{ .key = "ratio", .value = Option.Value{ .float = 1.5 }, .expected = @as(f64, 1.5), .arg = "--ratio=1.5" },
 };
 

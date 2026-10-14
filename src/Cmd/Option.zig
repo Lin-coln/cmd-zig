@@ -5,7 +5,7 @@ const Args = @import("../Args/Self.zig");
 pub const Type = std.meta.Tag(Value);
 pub const Value = union(enum) {
     boolean: bool,
-    int: usize,
+    int: i64,
     float: f64,
     string: []const u8,
 };
@@ -42,7 +42,7 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
         },
         .int => {
             const value = desc.value orelse return error.InvalidOptionValueFound;
-            return .{ .int = std.fmt.parseInt(usize, value, 10) catch return error.InvalidOptionValueFound };
+            return .{ .int = std.fmt.parseInt(i64, value, 10) catch return error.InvalidOptionValueFound };
         },
         .float => {
             const value = desc.value orelse return error.InvalidOptionValueFound;
@@ -70,6 +70,7 @@ test "parse returns the declared value type for valid arguments" {
         .{ .kind = .boolean, .arg = "--verbose=false", .expected = .{ .boolean = false } },
         .{ .kind = .int, .arg = "--count=42", .expected = .{ .int = 42 } },
         .{ .kind = .int, .arg = "--count=0", .expected = .{ .int = 0 } },
+        .{ .kind = .int, .arg = "--count=-1", .expected = .{ .int = -1 } },
         .{ .kind = .float, .arg = "--ratio=1.5", .expected = .{ .float = 1.5 } },
         .{ .kind = .float, .arg = "--ratio=-0.25", .expected = .{ .float = -0.25 } },
     };
@@ -94,9 +95,9 @@ test "parse rejects values invalid for the declared type" {
         .{ .kind = .boolean, .arg = "--verbose=" },
         .{ .kind = .int, .arg = "--count" },
         .{ .kind = .int, .arg = "--count=" },
-        .{ .kind = .int, .arg = "--count=-1" },
         .{ .kind = .int, .arg = "--count=abc" },
-        .{ .kind = .int, .arg = "--count=18446744073709551616" },
+        .{ .kind = .int, .arg = "--count=9223372036854775808" },
+        .{ .kind = .int, .arg = "--count=-9223372036854775809" },
         .{ .kind = .float, .arg = "--ratio" },
         .{ .kind = .float, .arg = "--ratio=" },
         .{ .kind = .float, .arg = "--ratio=abc" },
