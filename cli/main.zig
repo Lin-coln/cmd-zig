@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const mod = @import("mod");
-const build_options = @import("build_options");
 const Allocator = std.mem.Allocator;
 const Cmd = mod.Cmd;
 
@@ -17,11 +16,6 @@ pub fn main(init: std.process.Init) !void {
     const args: []const []const u8 = try init.minimal.args.toSlice(allocator);
     defer allocator.free(args);
 
-    const root: ?*RootDynamic = if (build_options.dynamic_root) try RootDynamic.create(allocator) else null;
-    defer if (root) |ptr| ptr.destroy();
-
-    const rootCommand = if (root) |ptr| ptr.asCommand() else comptime RootStatic.asCommand();
-
     rootCommand.execute(.{
         .allocator = allocator,
         .args = args,
@@ -30,25 +24,20 @@ pub fn main(init: std.process.Init) !void {
     };
 }
 
-const RootStatic = struct {
-    pub fn asCommand() Cmd {
-        return .initStatic(.{
-            .name = "root",
-            .options = &.{
-                .{ .key = "help", .alias = 'h', .type = .boolean },
-            },
-        }, @This());
-    }
-
+const rootCommand = Cmd.initStatic(.{
+    .name = "root",
+    .options = &.{
+        .{ .key = "help", .alias = 'h', .type = .boolean },
+    },
+}, struct {
     pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
         std.log.info("RootStatic", .{});
         for (ctx.args) |arg| {
             std.log.info("{s}", .{arg});
         }
-
         opts.print();
     }
-};
+});
 
 const RootDynamic = struct {
     const Self = @This();
