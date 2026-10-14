@@ -3,7 +3,7 @@ const t = std.testing;
 const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
-const Manifest = Self.Manifest;
+const Manifest = @import("../Manifest/Self.zig");
 const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
@@ -97,10 +97,6 @@ fn querySubCommand(self: Self, ctx: Context, name: []const u8) ?Self {
 test "Cmd.execute: parses declared options and passes through other arguments" {
     const Cmd = @import("Self.zig");
     var handler = struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "run",
-            .options = &.{Option.boolean("-v, --verbose")},
-        };
         calls: usize = 0,
         pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const OptionRecord) !void {
             self.calls += 1;
@@ -112,7 +108,10 @@ test "Cmd.execute: parses declared options and passes through other arguments" {
             try t.expect((try opts.get(bool, "verbose")).?);
         }
     }{};
-    const cmd = Cmd.initWithCtx(&handler, @TypeOf(handler));
+    const cmd = Cmd.initWithCtx(&handler, .{
+        .name = "run",
+        .options = &.{Option.boolean("-v, --verbose")},
+    }, @TypeOf(handler));
     try cmd.execute(.{
         .allocator = t.allocator,
         .args = &.{ "file", "--unknown", "-v", "--", "-v", "--verbose=false" },
@@ -122,11 +121,10 @@ test "Cmd.execute: parses declared options and passes through other arguments" {
 
 test "Cmd.execute: rejects an invalid value for a declared option" {
     const Cmd = @import("Self.zig");
-    const cmd = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "run",
-            .options = &.{Option.boolean("--verbose")},
-        };
+    const cmd = Cmd.init(.{
+        .name = "run",
+        .options = &.{Option.boolean("--verbose")},
+    }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {
             return error.UnexpectedExecution;
         }
@@ -174,7 +172,6 @@ test "Cmd.execute: runs the parent before the child with their respective argume
     const Cmd = @import("Self.zig");
     var stage: usize = 0;
     var child = struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "child" };
         stage: *usize,
         calls: usize = 0,
         saw_args: bool = false,
@@ -187,7 +184,6 @@ test "Cmd.execute: runs the parent before the child with their respective argume
         }
     }{ .stage = &stage };
     var parent = struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
         stage: *usize,
         child: Cmd,
         calls: usize = 0,
@@ -200,8 +196,8 @@ test "Cmd.execute: runs the parent before the child with their respective argume
         pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
             return if (std.mem.eql(u8, name, "child")) self.child else null;
         }
-    }{ .stage = &stage, .child = Cmd.initWithCtx(&child, @TypeOf(child)) };
-    try Cmd.initWithCtx(&parent, @TypeOf(parent)).execute(.{
+    }{ .stage = &stage, .child = Cmd.initWithCtx(&child, .{ .name = "child" }, @TypeOf(child)) };
+    try Cmd.initWithCtx(&parent, .{ .name = "parent" }, @TypeOf(parent)).execute(.{
         .allocator = t.allocator,
         .args = &.{ "child", "payload" },
     });
@@ -214,17 +210,14 @@ test "Cmd.execute: runs the parent before the child with their respective argume
 
 test "querySubCommand: returns null without a callback and forwards a lookup when present" {
     const Cmd = @import("Self.zig");
-    const without_query = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+    const without_query = Cmd.init(.{ .name = "parent" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
-    const with_query = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+    const with_query = Cmd.init(.{ .name = "parent" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
             if (!std.mem.eql(u8, name, "child")) return null;
-            return Cmd.init(struct {
-                pub const manifest: Cmd.Manifest = .{ .name = "child" };
+            return Cmd.init(.{ .name = "child" }, struct {
                 pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
             });
         }
@@ -238,19 +231,17 @@ test "querySubCommand: returns null without a callback and forwards a lookup whe
 test "resolveNextEntry: finds the first child before the terminator" {
     const Cmd = @import("Self.zig");
     var handler = struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
         queries: usize = 0,
         pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
             self.queries += 1;
             if (!std.mem.eql(u8, name, "child")) return null;
-            return Cmd.init(struct {
-                pub const manifest: Cmd.Manifest = .{ .name = "child" };
+            return Cmd.init(.{ .name = "child" }, struct {
                 pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
             });
         }
     }{};
-    const cmd = Cmd.initWithCtx(&handler, @TypeOf(handler));
+    const cmd = Cmd.initWithCtx(&handler, .{ .name = "parent" }, @TypeOf(handler));
 
     const found = resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{ "other", "child", "child" } }).?;
     try t.expectEqual(@as(usize, 1), found.idx);

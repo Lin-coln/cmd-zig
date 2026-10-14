@@ -2,7 +2,7 @@ const std = @import("std");
 const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
-const Manifest = Self.Manifest;
+const Manifest = @import("../Manifest/Self.zig");
 const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
@@ -12,13 +12,7 @@ pub const VTable = struct {
     querySubManifests: ?*const fn (?*anyopaque, Context) ?[]const Manifest = null,
 };
 
-pub fn init(comptime Impls: type) Self {
-    if (!@hasDecl(Impls, "manifest")) {
-        @compileError(@typeName(Impls) ++ " needs pub const manifest");
-    }
-    if (@TypeOf(Impls.manifest) != Manifest) {
-        @compileError(@typeName(Impls) ++ ".manifest must be Cmd.Manifest, found " ++ @typeName(@TypeOf(Impls.manifest)));
-    }
+pub fn init(manifest: Manifest, comptime Impls: type) Self {
     if (!@hasDecl(Impls, "onExecute")) {
         @compileError(@typeName(Impls) ++ " needs onExecute");
     }
@@ -52,24 +46,23 @@ pub fn init(comptime Impls: type) Self {
         }
     };
 
-    return .{ .manifest = Impls.manifest, .vt = &Static.vt };
+    return .{ .manifest = manifest, .vt = &Static.vt };
 }
 
 test "Cmd.init: leaves the instance and undeclared callbacks null" {
     const Cmd = @import("Self.zig");
-    const cmd = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "root" };
+    const cmd = comptime Cmd.init(.{ .name = "root" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     try t.expect(cmd.ptr == null);
+    try t.expectEqualStrings("root", cmd.manifest.name);
     try t.expect(cmd.vt.querySubCommand == null);
     try t.expect(cmd.vt.querySubManifests == null);
 }
 
 test "Cmd.init: forwards onExecute to a stateless handler" {
     const Cmd = @import("Self.zig");
-    const cmd = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "root" };
+    const cmd = comptime Cmd.init(.{ .name = "root" }, struct {
         pub fn onExecute(ctx: Cmd.Context, opts: *const OptionRecord) !void {
             try t.expectEqual(@as(usize, 1), ctx.args.len);
             try t.expectEqualStrings("input", ctx.args[0]);
@@ -84,23 +77,21 @@ test "Cmd.init: forwards onExecute to a stateless handler" {
 
 test "Cmd.init: forwards subcommand and manifest queries through the vtable" {
     const Cmd = @import("Self.zig");
-    const child = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "child",
-            .options = &.{Option.boolean("-h, --help")},
-        };
+    const child = comptime Cmd.init(.{
+        .name = "child",
+        .options = &.{Option.boolean("-h, --help")},
+    }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
-    const cmd = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "root",
-            .options = &.{Option.boolean("-h, --help")},
-        };
+    const cmd = comptime Cmd.init(.{
+        .name = "root",
+        .options = &.{Option.boolean("-h, --help")},
+    }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
             return if (std.mem.eql(u8, name, "child")) child else null;
         }
-        pub fn querySubManifests(_: Cmd.Context) ?[]const Cmd.Manifest {
+        pub fn querySubManifests(_: Cmd.Context) ?[]const Manifest {
             return &.{child.manifest};
         }
     });
@@ -112,8 +103,7 @@ test "Cmd.init: forwards subcommand and manifest queries through the vtable" {
 
 test "Cmd.init: forwards an onExecute error from a stateless handler" {
     const Cmd = @import("Self.zig");
-    const cmd = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "failing" };
+    const cmd = comptime Cmd.init(.{ .name = "failing" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) error{StaticFailure}!void {
             return error.StaticFailure;
         }

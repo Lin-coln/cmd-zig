@@ -25,14 +25,12 @@ pub fn main(init: std.process.Init) !void {
     };
 }
 
-const rootCommand = Cmd.init(struct {
-    pub const manifest: Cmd.Manifest = .{
-        .name = "root",
-        .options = &.{
-            .{ .key = "help", .alias = 'h', .type = .boolean },
-        },
-    };
-
+const rootCommand = Cmd.init(.{
+    .name = "root",
+    .options = &.{
+        .{ .key = "help", .alias = 'h', .type = .boolean },
+    },
+}, struct {
     pub fn onExecute(ctx: Cmd.Context, opts: *const OptionRecord) !void {
         for (ctx.args) |arg| {
             std.log.info("{s}", .{arg});
@@ -60,14 +58,12 @@ const RootDynamic = struct {
     }
 
     pub fn asCommand(ptr: *Self) Cmd {
-        return .initWithCtx(ptr, struct {
-            pub const manifest: Cmd.Manifest = .{
-                .name = "root",
-                .options = &.{
-                    .{ .key = "help", .alias = 'h', .type = .boolean },
-                },
-            };
-
+        return .initWithCtx(ptr, .{
+            .name = "root",
+            .options = &.{
+                .{ .key = "help", .alias = 'h', .type = .boolean },
+            },
+        }, struct {
             pub fn onExecute(self: *Self, ctx: Cmd.Context, opts: *const OptionRecord) !void {
                 self.executions += 1;
                 std.log.info("RootDynamic execution #{d}", .{self.executions});

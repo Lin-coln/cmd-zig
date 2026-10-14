@@ -2,13 +2,13 @@ const std = @import("std");
 const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
-const Manifest = Self.Manifest;
+const Manifest = @import("../Manifest/Self.zig");
 const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
 
 const init = @import("init.zig").init;
 
-pub fn initWithCtx(typed: anytype, comptime Impls: type) Self {
+pub fn initWithCtx(typed: anytype, manifest: Manifest, comptime Impls: type) Self {
     const Ptr = @TypeOf(typed);
     switch (@typeInfo(Ptr)) {
         .pointer => |info| {
@@ -22,8 +22,7 @@ pub fn initWithCtx(typed: anytype, comptime Impls: type) Self {
         @compileError(@typeName(Impls) ++ " needs onExecute");
     }
 
-    var cmd = init(struct {
-        pub const manifest = Impls.manifest;
+    var cmd = init(manifest, struct {
         pub const querySubCommand = if (@hasDecl(Impls, "querySubCommand")) querySubCommandFn else null;
         pub const querySubManifests = if (@hasDecl(Impls, "querySubManifests")) querySubManifestsFn else null;
 
@@ -49,10 +48,6 @@ pub fn initWithCtx(typed: anytype, comptime Impls: type) Self {
 test "Cmd.initWithCtx: binds each instance to its own state and shares the vtable" {
     const Cmd = @import("Self.zig");
     var a = struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "root",
-            .options = &.{Option.boolean("-h, --help")},
-        };
         executions: usize = 0,
         arg_count: usize = 0,
         help: bool = false,
@@ -64,13 +59,15 @@ test "Cmd.initWithCtx: binds each instance to its own state and shares the vtabl
         }
     }{};
     var b: @TypeOf(a) = .{};
-    const ca = Cmd.initWithCtx(&a, @TypeOf(a));
-    const cb = Cmd.initWithCtx(&b, @TypeOf(b));
+    const ca = Cmd.initWithCtx(&a, .{ .name = "first", .options = &.{Option.boolean("-h, --help")} }, @TypeOf(a));
+    const cb = Cmd.initWithCtx(&b, .{ .name = "second", .options = &.{Option.boolean("-h, --help")} }, @TypeOf(b));
     const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{"input"} };
     const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try opts.set("help", .{ .boolean = true });
     try t.expect(ca.vt == cb.vt);
+    try t.expectEqualStrings("first", ca.manifest.name);
+    try t.expectEqualStrings("second", cb.manifest.name);
     try t.expect(ca.ptr == @as(?*anyopaque, &a));
     try t.expect(ca.vt.querySubCommand == null);
     try t.expect(ca.vt.querySubManifests == null);
@@ -85,28 +82,26 @@ test "Cmd.initWithCtx: binds each instance to its own state and shares the vtabl
 
 test "Cmd.initWithCtx: forwards subcommand and manifest queries to the bound instance" {
     const Cmd = @import("Self.zig");
-    const leaf = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "child" };
+    const leaf = Cmd.init(.{ .name = "child" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     var parent = struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "root" };
         queries: usize = 0,
         manifest_queries: usize = 0,
         child: Cmd,
-        manifests: [1]Cmd.Manifest,
+        manifests: [1]Manifest,
 
         pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
             self.queries += 1;
             return if (std.mem.eql(u8, name, self.child.manifest.name)) self.child else null;
         }
-        pub fn querySubManifests(self: *@This(), _: Cmd.Context) ?[]const Cmd.Manifest {
+        pub fn querySubManifests(self: *@This(), _: Cmd.Context) ?[]const Manifest {
             self.manifest_queries += 1;
             return &self.manifests;
         }
     }{ .child = leaf, .manifests = .{leaf.manifest} };
-    const cmd = Cmd.initWithCtx(&parent, @TypeOf(parent));
+    const cmd = Cmd.initWithCtx(&parent, .{ .name = "root" }, @TypeOf(parent));
     const context: Cmd.Context = .{ .allocator = t.allocator, .args = &.{} };
     try t.expect(cmd.vt.querySubCommand.?(cmd.ptr, context, "missing") == null);
     try t.expectEqualStrings("child", cmd.vt.querySubCommand.?(cmd.ptr, context, "child").?.manifest.name);
@@ -118,14 +113,13 @@ test "Cmd.initWithCtx: forwards subcommand and manifest queries to the bound ins
 test "Cmd.initWithCtx: forwards an onExecute error from the bound instance" {
     const Cmd = @import("Self.zig");
     var instance = struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "failing" };
         attempted: bool = false,
         pub fn onExecute(self: *@This(), _: Cmd.Context, _: *const OptionRecord) error{DynamicFailure}!void {
             self.attempted = true;
             return error.DynamicFailure;
         }
     }{};
-    const cmd = Cmd.initWithCtx(&instance, @TypeOf(instance));
+    const cmd = Cmd.initWithCtx(&instance, .{ .name = "failing" }, @TypeOf(instance));
     const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try t.expectError(error.DynamicFailure, cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{} }, opts));

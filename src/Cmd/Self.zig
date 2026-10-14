@@ -2,14 +2,8 @@ const std = @import("std");
 const t = std.testing;
 
 pub const Context = @import("Context.zig");
-const Option = @import("../Option/Self.zig");
 const OptionRecord = @import("../Option/Record.zig");
-
-pub const Manifest = struct {
-    name: []const u8,
-    desc: ?[]const u8 = null,
-    options: ?[]const Option = null,
-};
+const Manifest = @import("../Manifest/Self.zig");
 
 const Self = @This();
 manifest: Manifest,
@@ -29,8 +23,7 @@ fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
 
 test "Cmd.querySubManifests: returns null when the callback is absent" {
     const Cmd = @import("Self.zig");
-    const simple = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "simple" };
+    const simple = Cmd.init(.{ .name = "simple" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{} };
@@ -39,10 +32,9 @@ test "Cmd.querySubManifests: returns null when the callback is absent" {
 
 test "Cmd.querySubManifests: returns the callback manifests when present" {
     const Cmd = @import("Self.zig");
-    const parent = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+    const parent = Cmd.init(.{ .name = "parent" }, struct {
         pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
-        pub fn querySubManifests(_: Cmd.Context) ?[]const Cmd.Manifest {
+        pub fn querySubManifests(_: Cmd.Context) ?[]const Manifest {
             return &.{.{ .name = "child" }};
         }
     });
