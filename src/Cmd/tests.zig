@@ -3,7 +3,7 @@ const Cmd = @import("Self.zig");
 const Context = Cmd.Context;
 const OptionRecord = Cmd.OptionRecord;
 
-const manifest: Cmd.Manifest = .{
+const root_manifest: Cmd.Manifest = .{
     .name = "root",
     .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
 };
@@ -13,15 +13,17 @@ const ctx: Context = .{
 };
 
 const Static = struct {
+    pub const manifest = root_manifest;
     pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
         try std.testing.expectEqual(@as(usize, 1), context.args.len);
         try std.testing.expectEqualStrings("input", context.args[0]);
         try std.testing.expect(opts.map.get("help").?.boolean);
     }
 };
-const static_cmd = Cmd.initStatic(manifest, Static);
+const static_cmd = Cmd.init(Static);
 
 const Dynamic = struct {
+    pub const manifest = root_manifest;
     executions: usize = 0,
     arg_count: usize = 0,
     help: bool = false,
@@ -34,12 +36,10 @@ const Dynamic = struct {
 };
 
 test "comptime stateless command executes without optional handlers" {
-    const cmd = comptime Cmd.initStatic(manifest, Static);
+    const cmd = comptime Cmd.init(Static);
     try std.testing.expect(cmd.ptr == null);
     try std.testing.expect(cmd.vt.querySubCommand == null);
     try std.testing.expect(cmd.vt.querySubManifests == null);
-    try std.testing.expect(cmd.querySubCommand(ctx, "missing") == null);
-    try std.testing.expect(cmd.querySubManifests(ctx) == null);
     try cmd.execute(ctx);
 }
 
@@ -51,8 +51,8 @@ test "static and allocated dynamic commands share a collection and preserve inst
     defer std.testing.allocator.destroy(b);
     b.* = .{};
 
-    const ca = Cmd.init(a, manifest, Dynamic);
-    const cb = Cmd.init(b, manifest, Dynamic);
+    const ca = Cmd.initWithCtx(a, Dynamic);
+    const cb = Cmd.initWithCtx(b, Dynamic);
     try std.testing.expect(ca.vt == cb.vt);
     try std.testing.expect(ca.ptr == @as(?*anyopaque, a));
     const commands: []const Cmd = &.{ static_cmd, ca, cb };
@@ -65,6 +65,7 @@ test "static and allocated dynamic commands share a collection and preserve inst
 }
 
 const Leaf = struct {
+    pub const manifest: Cmd.Manifest = .{ .name = "child", .options = root_manifest.options };
     pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
         try std.testing.expectEqual(@as(usize, 2), context.args.len);
         try std.testing.expectEqualStrings("child", context.args[0]);
@@ -72,14 +73,15 @@ const Leaf = struct {
         try std.testing.expect(opts.map.get("help").?.boolean);
     }
 };
-const child_manifest: Cmd.Manifest = .{ .name = "child", .options = manifest.options };
-const leaf_cmd = Cmd.initStatic(child_manifest, Leaf);
+const child_manifest = Leaf.manifest;
+const leaf_cmd = Cmd.init(Leaf);
 const child_ctx: Context = .{
     .allocator = std.testing.allocator,
     .args = &.{ "--help", "child", "payload", "-h" },
 };
 
 const StaticParent = struct {
+    pub const manifest = root_manifest;
     pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
         try std.testing.expectEqual(@as(usize, 0), context.args.len);
         try std.testing.expect(opts.map.get("help").?.boolean);
@@ -93,14 +95,15 @@ const StaticParent = struct {
 };
 
 test "stateless query handlers enumerate and dispatch subcommands" {
-    const cmd = comptime Cmd.initStatic(manifest, StaticParent);
-    try std.testing.expect(cmd.querySubCommand(child_ctx, "missing") == null);
-    try std.testing.expectEqualStrings("child", cmd.querySubManifests(child_ctx).?[0].name);
+    const cmd = comptime Cmd.init(StaticParent);
+    try std.testing.expect(cmd.vt.querySubCommand.?(cmd.ptr, child_ctx, "missing") == null);
+    try std.testing.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, child_ctx).?[0].name);
     try cmd.execute(child_ctx);
 }
 
 test "dynamic query handlers receive mutable instance state" {
     const Parent = struct {
+        pub const manifest = root_manifest;
         state: Dynamic = .{},
         queries: usize = 0,
         manifest_queries: usize = 0,
@@ -120,18 +123,22 @@ test "dynamic query handlers receive mutable instance state" {
         }
     };
     var parent: Parent = .{ .child = leaf_cmd, .manifests = .{child_manifest} };
-    const cmd = Cmd.init(&parent, manifest, Parent);
+    const cmd = Cmd.initWithCtx(&parent, Parent);
     try cmd.execute(child_ctx);
     try std.testing.expect(parent.queries > 0);
     try std.testing.expectEqual(@as(usize, 1), parent.state.executions);
     try std.testing.expectEqual(@as(usize, 0), parent.state.arg_count);
     try std.testing.expect(parent.state.help);
-    try std.testing.expectEqualStrings("child", cmd.querySubManifests(child_ctx).?[0].name);
+    try std.testing.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, child_ctx).?[0].name);
     try std.testing.expectEqual(@as(usize, 1), parent.manifest_queries);
 
     // A runtime parent can also select a stateful child.
+    const DynamicChild = struct {
+        pub const manifest = child_manifest;
+        pub const onExecute = Dynamic.onExecute;
+    };
     var child: Dynamic = .{};
-    parent.child = Cmd.init(&child, child_manifest, Dynamic);
+    parent.child = Cmd.initWithCtx(&child, DynamicChild);
     try cmd.execute(child_ctx);
     try std.testing.expectEqual(@as(usize, 1), child.executions);
     try std.testing.expectEqual(@as(usize, 2), child.arg_count);
@@ -140,21 +147,23 @@ test "dynamic query handlers receive mutable instance state" {
 
 test "static and dynamic adapters propagate handler errors" {
     const FailingStatic = struct {
+        pub const manifest = root_manifest;
         pub fn onExecute(_: Context, _: *const OptionRecord) error{StaticFailure}!void {
             return error.StaticFailure;
         }
     };
     const FailingDynamic = struct {
+        pub const manifest = root_manifest;
         attempted: bool = false,
         pub fn onExecute(self: *@This(), _: Context, _: *const OptionRecord) error{DynamicFailure}!void {
             self.attempted = true;
             return error.DynamicFailure;
         }
     };
-    const failing_static = comptime Cmd.initStatic(manifest, FailingStatic);
+    const failing_static = comptime Cmd.init(FailingStatic);
     try std.testing.expectError(error.StaticFailure, failing_static.execute(ctx));
     var instance: FailingDynamic = .{};
-    const failing_dynamic = Cmd.init(&instance, manifest, FailingDynamic);
+    const failing_dynamic = Cmd.initWithCtx(&instance, FailingDynamic);
     try std.testing.expectError(error.DynamicFailure, failing_dynamic.execute(ctx));
     try std.testing.expect(instance.attempted);
 }

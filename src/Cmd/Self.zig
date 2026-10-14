@@ -16,7 +16,7 @@ vt: *const VTable,
 
 pub const VTable = @import("init.zig").VTable;
 pub const init = @import("init.zig").init;
-pub const initStatic = @import("init.zig").initStatic;
+pub const initWithCtx = @import("init.zig").initWithCtx;
 pub const execute = @import("execute.zig").execute;
 
 fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
