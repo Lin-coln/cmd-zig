@@ -5,49 +5,43 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const test_step = b.step("test", "Run tests");
-    const run_step = b.step("run", "Run the app");
 
-    const mod = b.addModule("mod", .{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-    });
-
-    const cli = b.addExecutable(.{
-        .name = "cli",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("cli/main.zig"),
+    const cmd = blk: {
+        const mod = b.addModule("cmd", .{
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "mod", .module = mod },
-            },
-        }),
-    });
+        });
+        const tests = b.addTest(.{ .root_module = mod });
+        test_step.dependOn(&b.addRunArtifact(tests).step);
+        break :blk mod;
+    };
 
-    // cli
-    {
-        b.installArtifact(cli);
+    const foo_step = blk: {
+        const step = b.step("foo", "Run examples/foo");
 
-        const run_cmd = b.addRunArtifact(cli);
-        if (b.args) |args| {
-            run_cmd.addArgs(args);
-        }
+        const exe = b.addExecutable(.{
+            .name = "foo",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("examples/foo.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{
+                    .{ .name = "cmd", .module = cmd },
+                },
+            }),
+        });
+        b.installArtifact(exe);
 
-        run_step.dependOn(&run_cmd.step);
-        run_cmd.step.dependOn(b.getInstallStep());
-    }
+        const run = b.addRunArtifact(exe);
+        step.dependOn(&run.step);
+        run.step.dependOn(b.getInstallStep());
+        if (b.args) |args| run.addArgs(args);
 
-    // test
-    {
-        const run_mod_tests = b.addRunArtifact(b.addTest(.{
-            .root_module = mod,
-        }));
+        const tests = b.addTest(.{ .root_module = exe.root_module });
+        test_step.dependOn(&b.addRunArtifact(tests).step);
 
-        const run_cli_tests = b.addRunArtifact(b.addTest(.{
-            .root_module = cli.root_module,
-        }));
+        break :blk step;
+    };
 
-        test_step.dependOn(&run_mod_tests.step);
-        test_step.dependOn(&run_cli_tests.step);
-    }
+    _ = foo_step;
 }

@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const mod = @import("mod");
+const cmd = @import("cmd");
 const Allocator = std.mem.Allocator;
-const Cmd = mod.Cmd;
+const Cmd = cmd.Cmd;
 
 extern "kernel32" fn SetConsoleOutputCP(code_page: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
 
@@ -33,7 +33,6 @@ const rootCommand = Cmd.init(struct {
     };
 
     pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
-        std.log.info("RootStatic", .{});
         for (ctx.args) |arg| {
             std.log.info("{s}", .{arg});
         }
