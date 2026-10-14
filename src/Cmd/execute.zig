@@ -79,15 +79,15 @@ fn querySubCommand(self: Self, ctx: Context, name: []const u8) ?Self {
 }
 
 test "execute passes positional and unknown options through after parsing known options" {
-    const Handler = struct {
-        pub const manifest: Self.Manifest = .{
+    const Cmd = @import("Self.zig");
+    var handler = struct {
+        pub const manifest: Cmd.Manifest = .{
             .name = "run",
             .options = &.{.{ .key = "verbose", .alias = 'v', .type = .boolean }},
         };
         calls: usize = 0,
-
-        pub fn onExecute(handler: *@This(), ctx: Context, opts: *const OptionRecord) !void {
-            handler.calls += 1;
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+            self.calls += 1;
             try t.expectEqual(@as(usize, 4), ctx.args.len);
             try t.expectEqualStrings("file", ctx.args[0]);
             try t.expectEqualStrings("--unknown", ctx.args[1]);
@@ -95,9 +95,8 @@ test "execute passes positional and unknown options through after parsing known 
             try t.expectEqualStrings("--verbose=false", ctx.args[3]);
             try t.expect((try opts.get(bool, "verbose")).?);
         }
-    };
-    var handler: Handler = .{};
-    const cmd = Self.initWithCtx(&handler, Handler);
+    }{};
+    const cmd = Cmd.initWithCtx(&handler, @TypeOf(handler));
     try cmd.execute(.{
         .allocator = t.allocator,
         .args = &.{ "file", "--unknown", "-v", "--", "-v", "--verbose=false" },
@@ -106,16 +105,16 @@ test "execute passes positional and unknown options through after parsing known 
 }
 
 test "execute propagates invalid known option value" {
-    const Handler = struct {
-        pub const manifest: Self.Manifest = .{
+    const Cmd = @import("Self.zig");
+    const cmd = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{
             .name = "run",
             .options = &.{.{ .key = "verbose", .type = .boolean }},
         };
-        pub fn onExecute(_: Context, _: *const OptionRecord) !void {
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {
             return error.UnexpectedExecution;
         }
-    };
-    const cmd = Self.init(Handler);
+    });
     try t.expectError(error.InvalidOptionValueFound, cmd.execute(.{
         .allocator = t.allocator,
         .args = &.{"--verbose=yes"},
@@ -123,25 +122,21 @@ test "execute propagates invalid known option value" {
 }
 
 test "double dash prevents subcommand lookup" {
-    const Handler = struct {
-        pub const manifest: Self.Manifest = .{ .name = "parent" };
-        pub fn onExecute(ctx: Context, _: *const OptionRecord) !void {
+    const Cmd = @import("Self.zig");
+    const cmd = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        pub fn onExecute(ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
             try t.expectEqual(@as(usize, 1), ctx.args.len);
             try t.expectEqualStrings("child", ctx.args[0]);
         }
-        pub fn querySubCommand(_: Context, _: []const u8) ?Self {
-            return errorCommand();
-        }
-        fn errorCommand() Self {
-            const Failing = struct {
-                pub const manifest: Self.Manifest = .{ .name = "child" };
-                pub fn onExecute(_: Context, _: *const OptionRecord) !void {
+        pub fn querySubCommand(_: Cmd.Context, _: []const u8) ?Cmd {
+            return Cmd.init(struct {
+                pub const manifest: Cmd.Manifest = .{ .name = "child" };
+                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {
                     return error.UnexpectedSubcommand;
                 }
-            };
-            return Self.init(Failing);
+            });
         }
-    };
-    const cmd = Self.init(Handler);
+    });
     try cmd.execute(.{ .allocator = t.allocator, .args = &.{ "--", "child" } });
 }

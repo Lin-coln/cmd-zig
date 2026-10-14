@@ -28,20 +28,21 @@ fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
 }
 
 test "query submanifests handles absent and present callbacks" {
-    const Simple = struct {
-        pub const manifest: Manifest = .{ .name = "simple" };
-        pub fn onExecute(_: Context, _: *const OptionRecord) !void {}
-    };
-    const Parent = struct {
-        pub const manifest: Manifest = .{ .name = "parent" };
-        pub fn onExecute(_: Context, _: *const OptionRecord) !void {}
-        pub fn querySubManifests(_: Context) ?[]const Manifest {
+    const Cmd = @import("Self.zig");
+    const simple = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "simple" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+    });
+    const parent = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn querySubManifests(_: Cmd.Context) ?[]const Cmd.Manifest {
             return &.{.{ .name = "child" }};
         }
-    };
-    const ctx: Context = .{ .allocator = t.allocator, .args = &.{} };
-    try t.expect(init(Simple).querySubManifests(ctx) == null);
-    const manifests = init(Parent).querySubManifests(ctx).?;
+    });
+    const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{} };
+    try t.expect(simple.querySubManifests(ctx) == null);
+    const manifests = parent.querySubManifests(ctx).?;
     try t.expectEqual(@as(usize, 1), manifests.len);
     try t.expectEqualStrings("child", manifests[0].name);
 }

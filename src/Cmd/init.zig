@@ -54,77 +54,68 @@ pub fn init(comptime Impls: type) Self {
     return .{ .manifest = Impls.manifest, .vt = &Static.vt };
 }
 
-const Cmd = Self;
-
-const root_manifest: Cmd.Manifest = .{
-    .name = "root",
-    .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
-};
-const test_ctx: Context = .{
-    .allocator = t.allocator,
-    .args = &.{ "input", "--help" },
-};
-
-const StaticShit = struct {
-    pub const manifest = root_manifest;
-    pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
-        try t.expectEqual(@as(usize, 1), context.args.len);
-        try t.expectEqualStrings("input", context.args[0]);
-        try t.expect((try opts.get(bool, "help")).?);
-    }
-};
 test "comptime stateless command executes without optional handlers" {
-    const cmd = comptime Cmd.init(StaticShit);
+    const Cmd = @import("Self.zig");
+    const cmd = comptime Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{
+            .name = "root",
+            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+        };
+        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+            try t.expectEqual(@as(usize, 1), ctx.args.len);
+            try t.expectEqualStrings("input", ctx.args[0]);
+            try t.expect((try opts.get(bool, "help")).?);
+        }
+    });
     try t.expect(cmd.ptr == null);
     try t.expect(cmd.vt.querySubCommand == null);
     try t.expect(cmd.vt.querySubManifests == null);
-    try cmd.execute(test_ctx);
+    try cmd.execute(.{ .allocator = t.allocator, .args = &.{ "input", "--help" } });
 }
 
-const Leaf = struct {
-    pub const manifest: Cmd.Manifest = .{ .name = "child", .options = root_manifest.options };
-    pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
-        try t.expectEqual(@as(usize, 2), context.args.len);
-        try t.expectEqualStrings("child", context.args[0]);
-        try t.expectEqualStrings("payload", context.args[1]);
-        try t.expect((try opts.get(bool, "help")).?);
-    }
-};
-const child_manifest = Leaf.manifest;
-const leaf_cmd = Cmd.init(Leaf);
-const child_ctx: Context = .{
-    .allocator = t.allocator,
-    .args = &.{ "--help", "child", "payload", "-h" },
-};
-
-const StaticParent = struct {
-    pub const manifest = root_manifest;
-    pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
-        try t.expectEqual(@as(usize, 0), context.args.len);
-        try t.expect((try opts.get(bool, "help")).?);
-    }
-    pub fn querySubCommand(_: Context, name: []const u8) ?Cmd {
-        return if (std.mem.eql(u8, name, "child")) leaf_cmd else null;
-    }
-    pub fn querySubManifests(_: Context) ?[]const Cmd.Manifest {
-        return &.{child_manifest};
-    }
-};
-
 test "stateless query handlers enumerate and dispatch subcommands" {
-    const cmd = comptime Cmd.init(StaticParent);
-    try t.expect(cmd.vt.querySubCommand.?(cmd.ptr, child_ctx, "missing") == null);
-    try t.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, child_ctx).?[0].name);
-    try cmd.execute(child_ctx);
+    const Cmd = @import("Self.zig");
+    const child = comptime Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{
+            .name = "child",
+            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+        };
+        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+            try t.expectEqual(@as(usize, 2), ctx.args.len);
+            try t.expectEqualStrings("child", ctx.args[0]);
+            try t.expectEqualStrings("payload", ctx.args[1]);
+            try t.expect((try opts.get(bool, "help")).?);
+        }
+    });
+    const cmd = comptime Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{
+            .name = "root",
+            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+        };
+        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+            try t.expectEqual(@as(usize, 0), ctx.args.len);
+            try t.expect((try opts.get(bool, "help")).?);
+        }
+        pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
+            return if (std.mem.eql(u8, name, "child")) child else null;
+        }
+        pub fn querySubManifests(_: Cmd.Context) ?[]const Cmd.Manifest {
+            return &.{child.manifest};
+        }
+    });
+    const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{ "--help", "child", "payload", "-h" } };
+    try t.expect(cmd.vt.querySubCommand.?(cmd.ptr, ctx, "missing") == null);
+    try t.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, ctx).?[0].name);
+    try cmd.execute(ctx);
 }
 
 test "stateless adapter propagates handler errors" {
-    const Failing = struct {
-        pub const manifest = root_manifest;
-        pub fn onExecute(_: Context, _: *const OptionRecord) error{StaticFailure}!void {
+    const Cmd = @import("Self.zig");
+    const cmd = comptime Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "failing" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) error{StaticFailure}!void {
             return error.StaticFailure;
         }
-    };
-    const cmd = comptime init(Failing);
-    try t.expectError(error.StaticFailure, cmd.execute(test_ctx));
+    });
+    try t.expectError(error.StaticFailure, cmd.execute(.{ .allocator = t.allocator, .args = &.{} }));
 }
