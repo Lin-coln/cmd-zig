@@ -14,11 +14,10 @@ required: bool = false,
 default: ?Value = null,
 
 pub const init = @import("init.zig").init;
+pub const string = @import("init.zig").string;
 pub const int = @import("init.zig").int;
 pub const float = @import("init.zig").float;
 pub const boolean = @import("init.zig").boolean;
-pub const def = @import("init.zig").def;
-pub const with = @import("init.zig").with;
 
 pub fn match(self: *const Self, desc: Args.OptionDescriptor) bool {
     switch (desc.identity) {
@@ -54,7 +53,7 @@ test "Option.parse: parses explicit values and handles missing values by type" {
     try t.expectEqualDeep(Value{ .boolean = true }, try flag.parse(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expectError(error.InvalidOptionValueFound, flag.parse(Args.OptionDescriptor.parseFromArg("--verbose=").?));
 
-    const output = Self.init("--output=<val>");
+    const output = Self.string("--output=<val>");
     try t.expectEqualDeep(Value{ .string = "" }, try output.parse(Args.OptionDescriptor.parseFromArg("--output").?));
 
     const count = Self.int("--count=<val>");

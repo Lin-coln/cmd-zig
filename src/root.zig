@@ -10,6 +10,7 @@ test {
     _ = @import("Option/Self.zig");
     _ = @import("Option/Value.zig");
     _ = @import("Option/init.zig");
+    _ = @import("Option/parseFromStr.zig");
     _ = @import("Option/Record.zig");
     _ = @import("Cmd/init.zig");
     _ = @import("Cmd/initWithCtx.zig");

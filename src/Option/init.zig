@@ -1,116 +1,85 @@
 const std = @import("std");
 const t = std.testing;
-const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Value = Self.Value;
 const Type = Self.Type;
+const parseFromStr = @import("parseFromStr.zig").parseFromStr;
 
-pub fn init(comptime str: []const u8) Self {
-    return comptime parse(str);
+pub fn init(comptime str: []const u8, comptime opts: struct {
+    desc: ?[]const u8 = null,
+    type: ?Type = null,
+    required: bool = false,
+    default: ?Value = null,
+}) Self {
+    return comptime blk: {
+        const parsed = parseFromStr(str);
+        const kind = opts.type orelse parsed.type;
+        if (opts.default) |value| {
+            if (std.meta.activeTag(value) != kind) @compileError("Option default type does not match option type");
+        }
+        break :blk Self{
+            .key = parsed.key,
+            .alias = parsed.alias,
+            .desc = opts.desc,
+            .type = kind,
+            .required = opts.required,
+            .default = opts.default,
+        };
+    };
+}
+
+pub fn string(comptime str: []const u8) Self {
+    return init(str, .{ .type = .string });
 }
 
 pub fn int(comptime str: []const u8) Self {
-    return comptime init(str).with(.{ .type = .int });
+    return init(str, .{ .type = .int });
 }
 
 pub fn float(comptime str: []const u8) Self {
-    return comptime init(str).with(.{ .type = .float });
+    return init(str, .{ .type = .float });
 }
 
 pub fn boolean(comptime str: []const u8) Self {
-    return comptime init(str).with(.{ .type = .boolean });
+    return init(str, .{ .type = .boolean });
 }
 
-fn parse(str: []const u8) Self {
-    const comma = std.mem.indexOfScalar(u8, str, ',');
-    const long = std.mem.trim(u8, if (comma) |idx| str[idx + 1 ..] else str, " \t");
-    if (std.mem.indexOfScalar(u8, long, ',') != null) @compileError("Invalid option format");
+test "Option.init: uses the parsed type when no type is supplied" {
+    const flag = Self.init("-h, --help", .{});
+    try t.expectEqualStrings("help", flag.key);
+    try t.expectEqual(@as(?u8, 'h'), flag.alias);
+    try t.expectEqual(Type.boolean, flag.type);
+    try t.expect(flag.desc == null);
+    try t.expect(!flag.required);
+    try t.expect(flag.default == null);
 
-    const descriptor = Args.OptionDescriptor.parseFromArg(long) orelse @compileError("Invalid option format");
-    const key = switch (descriptor.identity) {
-        .key => |value| value,
-        .alias => @compileError("Invalid option format"),
-    };
-    if (std.mem.indexOfAny(u8, key, " \t\r\n") != null) @compileError("Invalid option format");
-
-    const kind: Type = if (descriptor.value) |placeholder| blk: {
-        if (placeholder.len < 3 or placeholder[0] != '<' or placeholder[placeholder.len - 1] != '>')
-            @compileError("Invalid option format");
-        if (std.mem.indexOfAny(u8, placeholder[1 .. placeholder.len - 1], "<> \t\r\n") != null)
-            @compileError("Invalid option format");
-        break :blk .string;
-    } else .boolean;
-
-    const alias: ?u8 = if (comma) |idx| blk: {
-        const short = std.mem.trim(u8, str[0..idx], " \t");
-        const short_descriptor = Args.OptionDescriptor.parseFromArg(short) orelse @compileError("Invalid option format");
-        if (short_descriptor.value != null) @compileError("Invalid option format");
-        break :blk switch (short_descriptor.identity) {
-            .alias => |value| value,
-            .key => @compileError("Invalid option format"),
-        };
-    } else null;
-
-    return .{ .key = key, .alias = alias, .type = kind };
+    const output = Self.init("--output=<val>", .{});
+    try t.expectEqual(Type.string, output.type);
 }
 
-pub fn def(self: Self, value: ?Value) Self {
-    var option = self;
-    if (value) |v| {
-        if (std.meta.activeTag(v) != self.type) {
-            if (@inComptime()) @compileError("Option default type does not match option type");
-            @panic("Option default type does not match option type");
-        }
-    }
-    option.default = value;
-    return option;
+test "Option.init: applies explicit type, description, requirement, and default" {
+    const count = Self.init("-c, --count=<val>", .{
+        .desc = "Number of items",
+        .type = .int,
+        .required = true,
+        .default = .{ .int = 5 },
+    });
+    try t.expectEqualStrings("count", count.key);
+    try t.expectEqual(@as(?u8, 'c'), count.alias);
+    try t.expectEqualStrings("Number of items", count.desc.?);
+    try t.expectEqual(Type.int, count.type);
+    try t.expect(count.required);
+    try t.expectEqualDeep(Value{ .int = 5 }, count.default.?);
 }
 
-pub fn with(self: Self, opts: struct { type: ?Type = null, required: ?bool = null, default: ?Value = null }) Self {
-    var option = self;
-    if (opts.type) |kind| option.type = kind;
-    if (opts.required) |required| option.required = required;
-    if (opts.default) |value| {
-        option = option.def(value);
-    } else {
-        option = option.def(option.default);
-    }
-    return option;
-}
+test "Option.string: parses a declaration and sets the string type" {
+    const output = Self.string("-o, --output=<val>");
+    try t.expectEqualStrings("output", output.key);
+    try t.expectEqual(@as(?u8, 'o'), output.alias);
+    try t.expectEqual(Type.string, output.type);
 
-test "Option.init: parses names, aliases, and value placeholders" {
-    const cases = [_]struct { source: []const u8, key: []const u8, alias: ?u8, kind: Type }{
-        .{ .source = "--help", .key = "help", .alias = null, .kind = .boolean },
-        .{ .source = "-h, --help", .key = "help", .alias = 'h', .kind = .boolean },
-        .{ .source = "-m, --mode=<val>", .key = "mode", .alias = 'm', .kind = .string },
-        .{ .source = "-c, --count=<val>", .key = "count", .alias = 'c', .kind = .string },
-    };
-    inline for (cases) |case| {
-        const option = Self.init(case.source);
-        try t.expectEqualStrings(case.key, option.key);
-        try t.expectEqual(case.alias, option.alias);
-        try t.expectEqual(case.kind, option.type);
-    }
-}
-
-test "Option.with: applies supplied settings and preserves the others" {
-    const base = Self.init("-c, --count=<val>");
-    const configured = base.with(.{ .required = true, .default = .{ .string = "5" } });
-    try t.expect(!base.required);
-    try t.expect(base.default == null);
-    try t.expectEqual(Type.string, base.type);
-    try t.expect(configured.required);
-    try t.expectEqual(Type.string, configured.type);
-    try t.expectEqualDeep(Value{ .string = "5" }, configured.default.?);
-
-    const relaxed = configured.with(.{ .required = false });
-    try t.expect(!relaxed.required);
-    try t.expectEqualDeep(configured.default.?, relaxed.default.?);
-    try t.expectEqual(Type.string, relaxed.type);
-
-    const typed = base.with(.{ .type = .int, .default = .{ .int = 5 } });
-    try t.expectEqual(Type.int, typed.type);
-    try t.expectEqualDeep(Value{ .int = 5 }, typed.default.?);
+    const name = Self.string("--name");
+    try t.expectEqual(Type.string, name.type);
 }
 
 test "Option.int: parses a declaration and sets the int type" {
@@ -130,15 +99,4 @@ test "Option.boolean: parses a declaration and sets the boolean type" {
     const enabled = Self.boolean("--enabled=<val>");
     try t.expectEqualStrings("enabled", enabled.key);
     try t.expectEqual(Type.boolean, enabled.type);
-}
-
-test "Option.def: sets or clears a matching default without changing the type" {
-    const base = Self.int("--count=<val>");
-    const configured = base.def(.{ .int = 5 });
-    try t.expectEqualDeep(Value{ .int = 5 }, configured.default.?);
-    try t.expectEqual(Type.int, configured.type);
-
-    const cleared = configured.def(null);
-    try t.expect(cleared.default == null);
-    try t.expectEqual(Type.int, cleared.type);
 }

@@ -142,7 +142,7 @@ test "checkOptions: rejects a missing required option" {
         .name = "run",
         .options = &.{
             Option.boolean("--verbose"),
-            Option.init("--output=<val>").with(.{ .required = true }),
+            Option.init("--output=<val>", .{ .required = true }),
         },
     };
     const opts = try OptionRecord.create(t.allocator);
@@ -157,7 +157,7 @@ test "checkOptions: rejects a missing required option" {
 test "checkOptions: fills a default without replacing a stored value" {
     const manifest: Manifest = .{
         .name = "run",
-        .options = &.{Option.int("--count=<val>").with(.{ .required = true }).def(.{ .int = 5 })},
+        .options = &.{Option.init("--count=<val>", .{ .type = .int, .required = true, .default = .{ .int = 5 } })},
     };
     const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
