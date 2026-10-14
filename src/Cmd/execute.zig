@@ -3,6 +3,7 @@ const t = std.testing;
 const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
+const Manifest = Self.Manifest;
 const OptionRecord = Self.OptionRecord;
 
 pub fn execute(self: Self, ctx: Context) !void {
@@ -54,6 +55,8 @@ pub fn execute(self: Self, ctx: Context) !void {
         try args_ls.append(allocator, arg);
     }
 
+    try checkOptions(self.manifest, opts);
+
     const args = try args_ls.toOwnedSlice(allocator);
     defer allocator.free(args);
 
@@ -62,6 +65,18 @@ pub fn execute(self: Self, ctx: Context) !void {
         .{ .allocator = allocator, .args = args },
         opts,
     );
+}
+
+fn checkOptions(manifest: Manifest, opts: *OptionRecord) !void {
+    const options = manifest.options orelse return;
+    for (options) |opt| {
+        if (opts.map.contains(opt.key)) continue;
+        if (opt.default) |value| {
+            try opts.set(opt.key, value);
+        } else if (opt.required) {
+            return error.RequiredOptionNotFound;
+        }
+    }
 }
 
 fn resolveNextEntry(self: Self, ctx: Context) ?struct { cmd: Self, idx: usize } {
@@ -119,6 +134,39 @@ test "execute returns an error for an invalid value of a declared option" {
         .allocator = t.allocator,
         .args = &.{"--verbose=yes"},
     }));
+}
+
+test "checkOptions rejects a missing required option" {
+    const manifest: Manifest = .{
+        .name = "run",
+        .options = &.{
+            .{ .key = "verbose", .type = .boolean },
+            .{ .key = "output", .required = true },
+        },
+    };
+    const opts = try OptionRecord.create(t.allocator);
+    defer opts.destroy();
+
+    try t.expectError(error.RequiredOptionNotFound, checkOptions(manifest, opts));
+    try opts.set("output", .{ .string = "file" });
+    try checkOptions(manifest, opts);
+    try t.expect((try opts.get(bool, "verbose")) == null);
+}
+
+test "checkOptions fills a default without replacing a stored option" {
+    const manifest: Manifest = .{
+        .name = "run",
+        .options = &.{.{ .key = "count", .type = .int, .required = true, .default = .{ .int = 5 } }},
+    };
+    const opts = try OptionRecord.create(t.allocator);
+    defer opts.destroy();
+
+    try checkOptions(manifest, opts);
+    try t.expectEqual(@as(i64, 5), (try opts.get(i64, "count")).?);
+
+    try opts.set("count", .{ .int = -2 });
+    try checkOptions(manifest, opts);
+    try t.expectEqual(@as(i64, -2), (try opts.get(i64, "count")).?);
 }
 
 test "execute runs the parent before the child with their respective arguments" {

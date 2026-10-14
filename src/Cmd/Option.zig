@@ -16,6 +16,7 @@ alias: ?u8 = null,
 desc: ?[]const u8 = null,
 type: Type = .string,
 required: bool = false,
+default: ?Value = null,
 
 pub fn match(self: *const Self, desc: Args.OptionDescriptor) bool {
     switch (desc.identity) {
