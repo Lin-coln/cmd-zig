@@ -1,4 +1,5 @@
 const std = @import("std");
+const t = std.testing;
 
 const Identity = union(enum) { key: []const u8, alias: u8 };
 
@@ -41,4 +42,26 @@ pub fn parseFromArg(arg: []const u8) ?Self {
         .identity = opt_id,
         .value = value,
     };
+}
+
+test "parse long and short options with optional values" {
+    const long = parseFromArg("--output=file.txt").?;
+    try t.expectEqualStrings("output", long.identity.key);
+    try t.expectEqualStrings("file.txt", long.value.?);
+
+    const short = parseFromArg("-o=").?;
+    try t.expectEqual(@as(u8, 'o'), short.identity.alias);
+    try t.expectEqualStrings("", short.value.?);
+
+    const flag = parseFromArg("--verbose").?;
+    try t.expectEqualStrings("verbose", flag.identity.key);
+    try t.expect(flag.value == null);
+}
+
+test "reject arguments without one valid option name" {
+    for (&[_][]const u8{ "", "-", "--", "--=value", "-ab", "plain" }) |arg| {
+        try t.expect(parseFromArg(arg) == null);
+    }
+    const value = parseFromArg("-a=1=2").?;
+    try t.expectEqualStrings("1=2", value.value.?);
 }
