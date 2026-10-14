@@ -39,6 +39,14 @@ pub fn get(self: *const Self, comptime T: type, key: []const u8) error{OptionTyp
     @compileError("OptionRecord.get supports bool and []const u8");
 }
 
+pub fn getArg(self: *const Self, key: []const u8) Allocator.Error!?[]u8 {
+    const value = self.map.get(key) orelse return null;
+    return switch (value) {
+        .boolean => |boolean| try std.fmt.allocPrint(self.allocator, "--{s}={}", .{ key, boolean }),
+        .string => |string| try std.fmt.allocPrint(self.allocator, "--{s}={s}", .{ key, string }),
+    };
+}
+
 pub fn print(self: *const Self) void {
     var iter = self.map.iterator();
     while (iter.next()) |entry| {
@@ -63,4 +71,23 @@ test "record stores and replaces typed option values" {
     try record.set("name", .{ .boolean = false });
     try t.expect(!(try record.get(bool, "name")).?);
     try t.expectEqual(@as(usize, 1), record.map.count());
+}
+
+test "getArg formats string and boolean options" {
+    const record = try Self.create(t.allocator);
+    defer record.destroy();
+
+    try t.expect((try record.getArg("missing")) == null);
+    const cases = [_]struct { key: []const u8, value: Option.Value, expected: []const u8 }{
+        .{ .key = "output", .value = .{ .string = "file.txt" }, .expected = "--output=file.txt" },
+        .{ .key = "output", .value = .{ .string = "" }, .expected = "--output=" },
+        .{ .key = "help", .value = .{ .boolean = true }, .expected = "--help=true" },
+        .{ .key = "help", .value = .{ .boolean = false }, .expected = "--help=false" },
+    };
+    for (cases) |case| {
+        try record.set(case.key, case.value);
+        const arg = (try record.getArg(case.key)).?;
+        defer t.allocator.free(arg);
+        try t.expectEqualStrings(case.expected, arg);
+    }
 }

@@ -32,6 +32,12 @@ const IntegrationChild = struct {
         try t.expectEqualStrings("--output=ignored", ctx.args[2]);
         try t.expectEqualStrings("dest", (try opts.get([]const u8, "output")).?);
         try t.expect(!(try opts.get(bool, "force")).?);
+        const output_arg = (try opts.getArg("output")).?;
+        defer ctx.allocator.free(output_arg);
+        try t.expectEqualStrings("--output=dest", output_arg);
+        const force_arg = (try opts.getArg("force")).?;
+        defer ctx.allocator.free(force_arg);
+        try t.expectEqualStrings("--force=false", force_arg);
     }
 };
 
