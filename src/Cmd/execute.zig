@@ -17,7 +17,7 @@ pub fn execute(self: Self, ctx: Context) !void {
     const allocator = ctx.allocator;
 
     var opts: *OptionRecord = try .create(allocator);
-    defer opts.deinit();
+    defer opts.destroy();
 
     var args_ls: std.ArrayList([]const u8) = .empty;
     defer args_ls.deinit(allocator);

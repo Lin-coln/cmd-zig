@@ -17,16 +17,12 @@ pub fn create(allocator: Allocator) !*Self {
     return ptr;
 }
 
-pub fn deinit(self: *Self) void {
+pub fn destroy(self: *Self) void {
     self.map.deinit(self.allocator);
     self.allocator.destroy(self);
 }
 
-pub fn set(
-    self: *Self,
-    key: []const u8,
-    val: Option.Value,
-) !void {
+pub fn set(self: *Self, key: []const u8, val: Option.Value) !void {
     try self.map.put(self.allocator, key, val);
 }
 
@@ -42,7 +38,7 @@ pub fn print(self: *const Self) void {
 
 test "record stores and replaces typed option values" {
     const record = try Self.create(t.allocator);
-    defer record.deinit();
+    defer record.destroy();
 
     try t.expect(record.map.get("name") == null);
     try record.set("name", .{ .string = "first" });
