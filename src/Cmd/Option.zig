@@ -5,6 +5,7 @@ const Args = @import("../Args/Self.zig");
 pub const Type = std.meta.Tag(Value);
 pub const Value = union(enum) {
     boolean: bool,
+    char: u8,
     string: []const u8,
 };
 
@@ -38,6 +39,11 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
                 return error.InvalidOptionValueFound;
             }
         },
+        .char => {
+            const value = desc.value orelse return error.InvalidOptionValueFound;
+            if (value.len != 1) return error.InvalidOptionValueFound;
+            return .{ .char = value[0] };
+        },
     }
 }
 
@@ -51,21 +57,42 @@ test "match accepts matching keys and aliases and rejects other identities" {
     try t.expect(!without_alias.match(Args.OptionDescriptor.parseFromArg("-v").?));
 }
 
-test "parse returns the supplied string or an empty string when omitted" {
-    const string: Self = .{ .key = "output" };
-    try t.expectEqualStrings("file", (try string.parse(Args.OptionDescriptor.parseFromArg("--output=file").?)).string);
-    try t.expectEqualStrings("", (try string.parse(Args.OptionDescriptor.parseFromArg("--output").?)).string);
+test "parse returns the declared value type for valid arguments" {
+    const cases = [_]struct { kind: Type, arg: []const u8, expected: Value }{
+        .{ .kind = .string, .arg = "--output=file", .expected = .{ .string = "file" } },
+        .{ .kind = .string, .arg = "--output", .expected = .{ .string = "" } },
+        .{ .kind = .boolean, .arg = "--verbose", .expected = .{ .boolean = true } },
+        .{ .kind = .boolean, .arg = "--verbose=true", .expected = .{ .boolean = true } },
+        .{ .kind = .boolean, .arg = "--verbose=false", .expected = .{ .boolean = false } },
+        .{ .kind = .char, .arg = "--delimiter=,", .expected = .{ .char = ',' } },
+        .{ .kind = .char, .arg = "-d=:", .expected = .{ .char = ':' } },
+    };
+    comptime {
+        for (@typeInfo(Type).@"enum".fields) |field| {
+            var covered = false;
+            for (cases) |case| {
+                if (std.mem.eql(u8, @tagName(case.kind), field.name)) covered = true;
+            }
+            if (!covered) @compileError("parse cases need a " ++ field.name ++ " example");
+        }
+    }
+    inline for (cases) |case| {
+        const option: Self = .{ .key = "option", .type = case.kind };
+        try t.expectEqualDeep(case.expected, try option.parse(Args.OptionDescriptor.parseFromArg(case.arg).?));
+    }
 }
 
-test "parse accepts a missing or valid boolean value" {
-    const boolean: Self = .{ .key = "verbose", .type = .boolean };
-    try t.expect((try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose").?)).boolean);
-    try t.expect((try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=true").?)).boolean);
-    try t.expect(!(try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=false").?)).boolean);
-}
-
-test "parse rejects an invalid boolean value" {
-    const boolean: Self = .{ .key = "verbose", .type = .boolean };
-    try t.expectError(error.InvalidOptionValueFound, boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=yes").?));
-    try t.expectError(error.InvalidOptionValueFound, boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=").?));
+test "parse rejects values invalid for the declared type" {
+    const cases = [_]struct { kind: Type, arg: []const u8 }{
+        .{ .kind = .boolean, .arg = "--verbose=yes" },
+        .{ .kind = .boolean, .arg = "--verbose=" },
+        .{ .kind = .char, .arg = "--delimiter" },
+        .{ .kind = .char, .arg = "--delimiter=" },
+        .{ .kind = .char, .arg = "--delimiter=ab" },
+        .{ .kind = .char, .arg = "--delimiter=é" },
+    };
+    inline for (cases) |case| {
+        const option: Self = .{ .key = "option", .type = case.kind };
+        try t.expectError(error.InvalidOptionValueFound, option.parse(Args.OptionDescriptor.parseFromArg(case.arg).?));
+    }
 }
