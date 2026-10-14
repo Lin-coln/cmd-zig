@@ -78,7 +78,7 @@ pub fn with(self: Self, opts: struct { type: ?Type = null, required: ?bool = nul
     return option;
 }
 
-test "init parses option names, aliases, and value placeholders" {
+test "Option.init: parses names, aliases, and value placeholders" {
     const cases = [_]struct { source: []const u8, key: []const u8, alias: ?u8, kind: Type }{
         .{ .source = "--help", .key = "help", .alias = null, .kind = .boolean },
         .{ .source = "-h, --help", .key = "help", .alias = 'h', .kind = .boolean },
@@ -93,7 +93,7 @@ test "init parses option names, aliases, and value placeholders" {
     }
 }
 
-test "with applies optional settings while preserving the option type" {
+test "Option.with: applies supplied settings and preserves the others" {
     const base = Self.init("-c, --count=<val>");
     const configured = base.with(.{ .required = true, .default = .{ .string = "5" } });
     try t.expect(!base.required);
@@ -113,22 +113,26 @@ test "with applies optional settings while preserving the option type" {
     try t.expectEqualDeep(Value{ .int = 5 }, typed.default.?);
 }
 
-test "int float and boolean constructors parse names and set their types" {
+test "Option.int: parses a declaration and sets the int type" {
     const count = Self.int("-c, --count=<val>");
     try t.expectEqualStrings("count", count.key);
     try t.expectEqual(@as(?u8, 'c'), count.alias);
     try t.expectEqual(Type.int, count.type);
+}
 
+test "Option.float: parses a declaration and sets the float type" {
     const ratio = Self.float("--ratio=<val>");
     try t.expectEqualStrings("ratio", ratio.key);
     try t.expectEqual(Type.float, ratio.type);
+}
 
+test "Option.boolean: parses a declaration and sets the boolean type" {
     const enabled = Self.boolean("--enabled=<val>");
     try t.expectEqualStrings("enabled", enabled.key);
     try t.expectEqual(Type.boolean, enabled.type);
 }
 
-test "def sets or clears a matching default without changing the type" {
+test "Option.def: sets or clears a matching default without changing the type" {
     const base = Self.int("--count=<val>");
     const configured = base.def(.{ .int = 5 });
     try t.expectEqualDeep(Value{ .int = 5 }, configured.default.?);

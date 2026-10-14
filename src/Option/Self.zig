@@ -39,7 +39,7 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
     return Value.parse(self.type, raw);
 }
 
-test "match accepts matching keys and aliases and rejects other identities" {
+test "Option.match: accepts its key and alias and rejects other identities" {
     const option = Self.boolean("-v, --verbose");
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("-v").?));
@@ -49,7 +49,7 @@ test "match accepts matching keys and aliases and rejects other identities" {
     try t.expect(!without_alias.match(Args.OptionDescriptor.parseFromArg("-v").?));
 }
 
-test "Option.parse handles absent values and delegates present values to Value.parse" {
+test "Option.parse: parses explicit values and handles missing values by type" {
     const flag = Self.boolean("--verbose");
     try t.expectEqualDeep(Value{ .boolean = true }, try flag.parse(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expectError(error.InvalidOptionValueFound, flag.parse(Args.OptionDescriptor.parseFromArg("--verbose=").?));

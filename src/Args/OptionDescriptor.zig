@@ -44,7 +44,7 @@ pub fn parseFromArg(arg: []const u8) ?Self {
     };
 }
 
-test "parseFromArg extracts identities and values from long, short, and flag arguments" {
+test "OptionDescriptor.parseFromArg: extracts identities and values from long and short options" {
     const long = parseFromArg("--output=file.txt").?;
     try t.expectEqualStrings("output", long.identity.key);
     try t.expectEqualStrings("file.txt", long.value.?);
@@ -58,13 +58,13 @@ test "parseFromArg extracts identities and values from long, short, and flag arg
     try t.expect(flag.value == null);
 }
 
-test "parseFromArg returns null when input is not one valid option" {
+test "OptionDescriptor.parseFromArg: rejects invalid option arguments" {
     for (&[_][]const u8{ "", "-", "--", "--=value", "-ab", "plain" }) |arg| {
         try t.expect(parseFromArg(arg) == null);
     }
 }
 
-test "parseFromArg keeps equal signs after the first one in the value" {
+test "OptionDescriptor.parseFromArg: preserves equal signs inside a value" {
     const value = parseFromArg("-a=1=2").?;
     try t.expectEqualStrings("1=2", value.value.?);
 }

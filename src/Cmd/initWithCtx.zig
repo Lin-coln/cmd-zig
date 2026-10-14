@@ -46,7 +46,7 @@ pub fn initWithCtx(typed: anytype, comptime Impls: type) Self {
     return cmd;
 }
 
-test "initWithCtx binds each instance to its own state and shares the vtable" {
+test "Cmd.initWithCtx: binds each instance to its own state and shares the vtable" {
     const Cmd = @import("Self.zig");
     var a = struct {
         pub const manifest: Cmd.Manifest = .{
@@ -83,7 +83,7 @@ test "initWithCtx binds each instance to its own state and shares the vtable" {
     try t.expect(a.help and b.help);
 }
 
-test "initWithCtx forwards subcommand and manifest queries to the bound instance" {
+test "Cmd.initWithCtx: forwards subcommand and manifest queries to the bound instance" {
     const Cmd = @import("Self.zig");
     const leaf = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "child" };
@@ -115,7 +115,7 @@ test "initWithCtx forwards subcommand and manifest queries to the bound instance
     try t.expectEqual(@as(usize, 1), parent.manifest_queries);
 }
 
-test "initWithCtx forwards an onExecute error from the bound instance" {
+test "Cmd.initWithCtx: forwards an onExecute error from the bound instance" {
     const Cmd = @import("Self.zig");
     var instance = struct {
         pub const manifest: Cmd.Manifest = .{ .name = "failing" };

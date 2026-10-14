@@ -61,13 +61,13 @@ const value_cases = .{
     .{ .key = "ratio", .value = Option.Value{ .float = 1.5 }, .expected = @as(f64, 1.5), .arg = "--ratio=1.5" },
 };
 
-test "get returns null for a missing key" {
+test "OptionRecord.get: returns null for a missing key" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
     try t.expect((try record.get([]const u8, "name")) == null);
 }
 
-test "set replaces the value at an existing key" {
+test "OptionRecord.set: replaces the value at an existing key" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
 
@@ -78,7 +78,7 @@ test "set replaces the value at an existing key" {
     try t.expectEqual(@as(usize, 1), record.map.count());
 }
 
-test "get returns OptionTypeMismatch when the requested type differs" {
+test "OptionRecord.get: returns OptionTypeMismatch for a different type" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
 
@@ -86,7 +86,7 @@ test "get returns OptionTypeMismatch when the requested type differs" {
     try t.expectError(error.OptionTypeMismatch, record.get(bool, "name"));
 }
 
-test "get returns the stored payload for each value type" {
+test "OptionRecord.get: returns the stored payload for every value type" {
     comptime {
         for (@typeInfo(Option.Type).@"enum".fields) |field| {
             var covered = false;
@@ -105,7 +105,7 @@ test "get returns the stored payload for each value type" {
     }
 }
 
-test "getArg formats stored values as long option arguments" {
+test "OptionRecord.getArg: formats stored values as long option arguments" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
 
@@ -117,7 +117,7 @@ test "getArg formats stored values as long option arguments" {
     }
 }
 
-test "getArg returns null for a missing key" {
+test "OptionRecord.getArg: returns null for a missing key" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
     try t.expect((try record.getArg("missing")) == null);

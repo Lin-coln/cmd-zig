@@ -30,7 +30,7 @@ pub const Value = union(enum) {
     }
 };
 
-test "Value.parse returns the declared value type for valid raw values" {
+test "Value.parse: returns the declared type for valid raw values" {
     const cases = [_]struct { kind: Type, raw: []const u8, expected: Value }{
         .{ .kind = .string, .raw = "file", .expected = .{ .string = "file" } },
         .{ .kind = .string, .raw = "", .expected = .{ .string = "" } },
@@ -56,7 +56,7 @@ test "Value.parse returns the declared value type for valid raw values" {
     }
 }
 
-test "Value.parse rejects invalid raw values" {
+test "Value.parse: rejects invalid raw values" {
     const cases = [_]struct { kind: Type, raw: []const u8 }{
         .{ .kind = .boolean, .raw = "yes" },
         .{ .kind = .boolean, .raw = "" },

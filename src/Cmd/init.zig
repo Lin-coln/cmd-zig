@@ -55,7 +55,7 @@ pub fn init(comptime Impls: type) Self {
     return .{ .manifest = Impls.manifest, .vt = &Static.vt };
 }
 
-test "init leaves the instance and undeclared callbacks null" {
+test "Cmd.init: leaves the instance and undeclared callbacks null" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "root" };
@@ -66,7 +66,7 @@ test "init leaves the instance and undeclared callbacks null" {
     try t.expect(cmd.vt.querySubManifests == null);
 }
 
-test "init forwards onExecute to a stateless handler" {
+test "Cmd.init: forwards onExecute to a stateless handler" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "root" };
@@ -82,7 +82,7 @@ test "init forwards onExecute to a stateless handler" {
     try cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{"input"} }, opts);
 }
 
-test "init forwards stateless subcommand and manifest queries through the vtable" {
+test "Cmd.init: forwards subcommand and manifest queries through the vtable" {
     const Cmd = @import("Self.zig");
     const child = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
@@ -110,7 +110,7 @@ test "init forwards stateless subcommand and manifest queries through the vtable
     try t.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, ctx).?[0].name);
 }
 
-test "init forwards an onExecute error from a stateless handler" {
+test "Cmd.init: forwards an onExecute error from a stateless handler" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "failing" };

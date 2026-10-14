@@ -19,7 +19,7 @@ pub fn split(self: Self, idx: usize) struct { Self, Self } {
     };
 }
 
-test "split returns the argument prefix and suffix with the original allocator" {
+test "Context.split: returns argument slices with the original allocator" {
     const ctx: Self = .{ .allocator = t.allocator, .args = &.{ "one", "two", "three" } };
     const left, const right = ctx.split(1);
     try t.expect(left.allocator.ptr == ctx.allocator.ptr);

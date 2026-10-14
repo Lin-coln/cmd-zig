@@ -94,7 +94,7 @@ fn querySubCommand(self: Self, ctx: Context, name: []const u8) ?Self {
     return f(self.ptr, ctx, name);
 }
 
-test "execute parses declared options and passes through other arguments" {
+test "Cmd.execute: parses declared options and passes through other arguments" {
     const Cmd = @import("Self.zig");
     var handler = struct {
         pub const manifest: Cmd.Manifest = .{
@@ -120,7 +120,7 @@ test "execute parses declared options and passes through other arguments" {
     try t.expectEqual(@as(usize, 1), handler.calls);
 }
 
-test "execute returns an error for an invalid value of a declared option" {
+test "Cmd.execute: rejects an invalid value for a declared option" {
     const Cmd = @import("Self.zig");
     const cmd = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
@@ -137,7 +137,7 @@ test "execute returns an error for an invalid value of a declared option" {
     }));
 }
 
-test "checkOptions rejects a missing required option" {
+test "checkOptions: rejects a missing required option" {
     const manifest: Manifest = .{
         .name = "run",
         .options = &.{
@@ -154,7 +154,7 @@ test "checkOptions rejects a missing required option" {
     try t.expect((try opts.get(bool, "verbose")) == null);
 }
 
-test "checkOptions fills a default without replacing a stored option" {
+test "checkOptions: fills a default without replacing a stored value" {
     const manifest: Manifest = .{
         .name = "run",
         .options = &.{Option.int("--count=<val>").with(.{ .required = true }).def(.{ .int = 5 })},
@@ -170,7 +170,7 @@ test "checkOptions fills a default without replacing a stored option" {
     try t.expectEqual(@as(i64, -2), (try opts.get(i64, "count")).?);
 }
 
-test "execute runs the parent before the child with their respective arguments" {
+test "Cmd.execute: runs the parent before the child with their respective arguments" {
     const Cmd = @import("Self.zig");
     var stage: usize = 0;
     var child = struct {
@@ -212,7 +212,7 @@ test "execute runs the parent before the child with their respective arguments" 
     try t.expectEqual(@as(usize, 2), stage);
 }
 
-test "querySubCommand returns null without a callback and forwards a lookup when present" {
+test "querySubCommand: returns null without a callback and forwards a lookup when present" {
     const Cmd = @import("Self.zig");
     const without_query = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };
@@ -235,7 +235,7 @@ test "querySubCommand returns null without a callback and forwards a lookup when
     try t.expectEqualStrings("child", querySubCommand(with_query, ctx, "child").?.manifest.name);
 }
 
-test "resolveNextEntry returns the first child before the terminator or null when none exists" {
+test "resolveNextEntry: finds the first child before the terminator" {
     const Cmd = @import("Self.zig");
     var handler = struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };

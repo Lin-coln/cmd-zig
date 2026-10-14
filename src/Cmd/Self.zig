@@ -27,7 +27,7 @@ fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
     return f(self.ptr, ctx);
 }
 
-test "querySubManifests returns null when the callback is absent" {
+test "Cmd.querySubManifests: returns null when the callback is absent" {
     const Cmd = @import("Self.zig");
     const simple = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "simple" };
@@ -37,7 +37,7 @@ test "querySubManifests returns null when the callback is absent" {
     try t.expect(simple.querySubManifests(ctx) == null);
 }
 
-test "querySubManifests returns the callback manifests when present" {
+test "Cmd.querySubManifests: returns the callback manifests when present" {
     const Cmd = @import("Self.zig");
     const parent = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };
