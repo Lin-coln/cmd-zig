@@ -19,7 +19,7 @@ vt: *const VTable,
 
 pub const VTable = @import("init.zig").VTable;
 pub const init = @import("init.zig").init;
-pub const initWithCtx = @import("init.zig").initWithCtx;
+pub const initWithCtx = @import("initWithCtx.zig").initWithCtx;
 pub const execute = @import("execute.zig").execute;
 
 fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {

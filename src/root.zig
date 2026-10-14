@@ -11,6 +11,7 @@ test {
     _ = @import("Cmd/Option.zig");
     _ = @import("Cmd/OptionRecord.zig");
     _ = @import("Cmd/init.zig");
+    _ = @import("Cmd/initWithCtx.zig");
     _ = @import("Cmd/execute.zig");
 }
 
@@ -84,4 +85,53 @@ test "public command API propagates a child option error after parent execution"
     }));
     try t.expectEqual(@as(usize, 1), parent.executions);
     try t.expectEqual(@as(usize, 0), child.executions);
+}
+
+test "static and allocated dynamic commands share a collection and preserve instance state" {
+    const Context = Cmd.Context;
+    const OptionRecord = Cmd.OptionRecord;
+    const root_manifest: Cmd.Manifest = .{
+        .name = "root",
+        .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
+    };
+    const test_ctx: Context = .{ .allocator = t.allocator, .args = &.{ "input", "--help" } };
+    const Static = struct {
+        pub const manifest = root_manifest;
+        pub fn onExecute(ctx: Context, opts: *const OptionRecord) !void {
+            try t.expectEqual(@as(usize, 1), ctx.args.len);
+            try t.expectEqualStrings("input", ctx.args[0]);
+            try t.expect((try opts.get(bool, "help")).?);
+        }
+    };
+    const static_cmd = Cmd.init(Static);
+    const Dynamic = struct {
+        pub const manifest = root_manifest;
+        executions: usize = 0,
+        arg_count: usize = 0,
+        help: bool = false,
+
+        pub fn onExecute(self: *@This(), context: Context, opts: *const OptionRecord) !void {
+            self.executions += 1;
+            self.arg_count = context.args.len;
+            self.help = (try opts.get(bool, "help")) orelse false;
+        }
+    };
+    const a = try t.allocator.create(Dynamic);
+    defer t.allocator.destroy(a);
+    a.* = .{};
+    const b = try t.allocator.create(Dynamic);
+    defer t.allocator.destroy(b);
+    b.* = .{};
+
+    const ca = Cmd.initWithCtx(a, Dynamic);
+    const cb = Cmd.initWithCtx(b, Dynamic);
+    try t.expect(ca.vt == cb.vt);
+    try t.expect(ca.ptr == @as(?*anyopaque, a));
+    const commands: []const Cmd = &.{ static_cmd, ca, cb };
+    for (commands) |cmd| try cmd.execute(test_ctx);
+    try ca.execute(test_ctx);
+    try t.expectEqual(@as(usize, 2), a.executions);
+    try t.expectEqual(@as(usize, 1), b.executions);
+    try t.expectEqual(@as(usize, 1), a.arg_count);
+    try t.expect(a.help and b.help);
 }
