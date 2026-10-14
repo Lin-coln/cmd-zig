@@ -10,16 +10,16 @@ pub const Manifest = struct {
 
 const Self = @This();
 manifest: Manifest,
-callExecute: *const fn (Self, Context, *const OptionRecord) anyerror!void,
-querySubCommand: *const fn (Self, Context, []const u8) ?Self,
-querySubManifests: *const fn (Self, Context) ?[]const Manifest,
+/// Borrowed implementation state; null for stateless commands.
+ptr: ?*anyopaque = null,
+vt: *const VTable,
 
+pub const VTable = @import("init.zig").VTable;
 pub const init = @import("init.zig").init;
+pub const initStatic = @import("init.zig").initStatic;
 pub const execute = @import("execute.zig").execute;
 
-// ptr: *anyopaque,
-// vt: *const @import("init.zig").VTable,
-// fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
-//     const f = self.vt.querySubManifests orelse return null;
-//     return f(self.ptr, ctx);
-// }
+fn querySubManifests(self: Self, ctx: Context) ?[]const Manifest {
+    const f = self.vt.querySubManifests orelse return null;
+    return f(self.ptr, ctx);
+}

@@ -3,6 +3,10 @@ const std = @import("std");
 pub const Args = @import("Args/Self.zig");
 pub const Cmd = @import("Cmd/Self.zig");
 
+test {
+    _ = @import("Cmd/tests.zig");
+}
+
 test "basic add functionality" {
     try std.testing.expect(add(3, 7) == 10);
 }

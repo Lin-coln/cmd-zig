@@ -3,6 +3,8 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const cli_options = b.addOptions();
+    cli_options.addOption(bool, "dynamic_root", b.option(bool, "dynamic-root", "Use the stateful root command in the example") orelse false);
 
     const test_step = b.step("test", "Run tests");
     const run_step = b.step("run", "Run the app");
@@ -23,6 +25,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+    cli.root_module.addOptions("build_options", cli_options);
 
     // cli
     {
