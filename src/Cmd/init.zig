@@ -106,7 +106,7 @@ const Static = struct {
     pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
         try t.expectEqual(@as(usize, 1), context.args.len);
         try t.expectEqualStrings("input", context.args[0]);
-        try t.expect(opts.map.get("help").?.boolean);
+        try t.expect((try opts.get(bool, "help")).?);
     }
 };
 const static_cmd = Cmd.init(Static);
@@ -120,7 +120,7 @@ const Dynamic = struct {
     pub fn onExecute(self: *@This(), context: Context, opts: *const OptionRecord) !void {
         self.executions += 1;
         self.arg_count = context.args.len;
-        self.help = if (opts.map.get("help")) |value| value.boolean else false;
+        self.help = (try opts.get(bool, "help")) orelse false;
     }
 };
 
@@ -159,7 +159,7 @@ const Leaf = struct {
         try t.expectEqual(@as(usize, 2), context.args.len);
         try t.expectEqualStrings("child", context.args[0]);
         try t.expectEqualStrings("payload", context.args[1]);
-        try t.expect(opts.map.get("help").?.boolean);
+        try t.expect((try opts.get(bool, "help")).?);
     }
 };
 const child_manifest = Leaf.manifest;
@@ -173,7 +173,7 @@ const StaticParent = struct {
     pub const manifest = root_manifest;
     pub fn onExecute(context: Context, opts: *const OptionRecord) !void {
         try t.expectEqual(@as(usize, 0), context.args.len);
-        try t.expect(opts.map.get("help").?.boolean);
+        try t.expect((try opts.get(bool, "help")).?);
     }
     pub fn querySubCommand(_: Context, name: []const u8) ?Cmd {
         return if (std.mem.eql(u8, name, "child")) leaf_cmd else null;

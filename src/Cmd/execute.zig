@@ -93,7 +93,7 @@ test "execute passes positional and unknown options through after parsing known 
             try t.expectEqualStrings("--unknown", ctx.args[1]);
             try t.expectEqualStrings("-v", ctx.args[2]);
             try t.expectEqualStrings("--verbose=false", ctx.args[3]);
-            try t.expect(opts.map.get("verbose").?.boolean);
+            try t.expect((try opts.get(bool, "verbose")).?);
         }
     };
     var handler: Handler = .{};

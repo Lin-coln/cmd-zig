@@ -30,8 +30,8 @@ const IntegrationChild = struct {
         try t.expectEqualStrings("child", ctx.args[0]);
         try t.expectEqualStrings("payload", ctx.args[1]);
         try t.expectEqualStrings("--output=ignored", ctx.args[2]);
-        try t.expectEqualStrings("dest", opts.map.get("output").?.string);
-        try t.expect(!opts.map.get("force").?.boolean);
+        try t.expectEqualStrings("dest", (try opts.get([]const u8, "output")).?);
+        try t.expect(!(try opts.get(bool, "force")).?);
     }
 };
 
@@ -46,7 +46,7 @@ const IntegrationParent = struct {
     pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
         self.executions += 1;
         try t.expectEqual(@as(usize, 0), ctx.args.len);
-        try t.expect(opts.map.get("trace").?.boolean);
+        try t.expect((try opts.get(bool, "trace")).?);
     }
 
     pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
