@@ -36,7 +36,8 @@ pub fn getArg(self: *const Self, key: []const u8) !?[]u8 {
     const value = self.map.get(key) orelse return null;
     return switch (value) {
         .boolean => |boolean| try std.fmt.allocPrint(self.allocator, "--{s}={}", .{ key, boolean }),
-        .char => |char| try std.fmt.allocPrint(self.allocator, "--{s}={c}", .{ key, char }),
+        .int => |int| try std.fmt.allocPrint(self.allocator, "--{s}={d}", .{ key, int }),
+        .float => |float| try std.fmt.allocPrint(self.allocator, "--{s}={d}", .{ key, float }),
         .string => |string| try std.fmt.allocPrint(self.allocator, "--{s}={s}", .{ key, string }),
     };
 }
@@ -56,8 +57,8 @@ const value_cases = .{
     .{ .key = "quiet", .value = Option.Value{ .boolean = false }, .expected = @as(bool, false), .arg = "--quiet=false" },
     .{ .key = "output", .value = Option.Value{ .string = "file.txt" }, .expected = @as([]const u8, "file.txt"), .arg = "--output=file.txt" },
     .{ .key = "empty", .value = Option.Value{ .string = "" }, .expected = @as([]const u8, ""), .arg = "--empty=" },
-    .{ .key = "delimiter", .value = Option.Value{ .char = ',' }, .expected = @as(u8, ','), .arg = "--delimiter=," },
-    .{ .key = "raw", .value = Option.Value{ .char = 0xe9 }, .expected = @as(u8, 0xe9), .arg = &[_]u8{ '-', '-', 'r', 'a', 'w', '=', 0xe9 } },
+    .{ .key = "count", .value = Option.Value{ .int = 42 }, .expected = @as(usize, 42), .arg = "--count=42" },
+    .{ .key = "ratio", .value = Option.Value{ .float = 1.5 }, .expected = @as(f64, 1.5), .arg = "--ratio=1.5" },
 };
 
 test "get returns null for a missing key" {

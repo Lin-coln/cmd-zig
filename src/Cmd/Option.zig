@@ -5,7 +5,8 @@ const Args = @import("../Args/Self.zig");
 pub const Type = std.meta.Tag(Value);
 pub const Value = union(enum) {
     boolean: bool,
-    char: u8,
+    int: usize,
+    float: f64,
     string: []const u8,
 };
 
@@ -39,10 +40,13 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
                 return error.InvalidOptionValueFound;
             }
         },
-        .char => {
+        .int => {
             const value = desc.value orelse return error.InvalidOptionValueFound;
-            if (value.len != 1) return error.InvalidOptionValueFound;
-            return .{ .char = value[0] };
+            return .{ .int = std.fmt.parseInt(usize, value, 10) catch return error.InvalidOptionValueFound };
+        },
+        .float => {
+            const value = desc.value orelse return error.InvalidOptionValueFound;
+            return .{ .float = std.fmt.parseFloat(f64, value) catch return error.InvalidOptionValueFound };
         },
     }
 }
@@ -64,8 +68,10 @@ test "parse returns the declared value type for valid arguments" {
         .{ .kind = .boolean, .arg = "--verbose", .expected = .{ .boolean = true } },
         .{ .kind = .boolean, .arg = "--verbose=true", .expected = .{ .boolean = true } },
         .{ .kind = .boolean, .arg = "--verbose=false", .expected = .{ .boolean = false } },
-        .{ .kind = .char, .arg = "--delimiter=,", .expected = .{ .char = ',' } },
-        .{ .kind = .char, .arg = "-d=:", .expected = .{ .char = ':' } },
+        .{ .kind = .int, .arg = "--count=42", .expected = .{ .int = 42 } },
+        .{ .kind = .int, .arg = "--count=0", .expected = .{ .int = 0 } },
+        .{ .kind = .float, .arg = "--ratio=1.5", .expected = .{ .float = 1.5 } },
+        .{ .kind = .float, .arg = "--ratio=-0.25", .expected = .{ .float = -0.25 } },
     };
     comptime {
         for (@typeInfo(Type).@"enum".fields) |field| {
@@ -86,10 +92,15 @@ test "parse rejects values invalid for the declared type" {
     const cases = [_]struct { kind: Type, arg: []const u8 }{
         .{ .kind = .boolean, .arg = "--verbose=yes" },
         .{ .kind = .boolean, .arg = "--verbose=" },
-        .{ .kind = .char, .arg = "--delimiter" },
-        .{ .kind = .char, .arg = "--delimiter=" },
-        .{ .kind = .char, .arg = "--delimiter=ab" },
-        .{ .kind = .char, .arg = "--delimiter=é" },
+        .{ .kind = .int, .arg = "--count" },
+        .{ .kind = .int, .arg = "--count=" },
+        .{ .kind = .int, .arg = "--count=-1" },
+        .{ .kind = .int, .arg = "--count=abc" },
+        .{ .kind = .int, .arg = "--count=18446744073709551616" },
+        .{ .kind = .float, .arg = "--ratio" },
+        .{ .kind = .float, .arg = "--ratio=" },
+        .{ .kind = .float, .arg = "--ratio=abc" },
+        .{ .kind = .float, .arg = "--ratio=1.2.3" },
     };
     inline for (cases) |case| {
         const option: Self = .{ .key = "option", .type = case.kind };
