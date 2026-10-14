@@ -78,7 +78,7 @@ fn querySubCommand(self: Self, ctx: Context, name: []const u8) ?Self {
     return f(self.ptr, ctx, name);
 }
 
-test "execute passes positional and unknown options through after parsing known options" {
+test "execute parses declared options and passes through other arguments" {
     const Cmd = @import("Self.zig");
     var handler = struct {
         pub const manifest: Cmd.Manifest = .{
@@ -104,7 +104,7 @@ test "execute passes positional and unknown options through after parsing known 
     try t.expectEqual(@as(usize, 1), handler.calls);
 }
 
-test "execute propagates invalid known option value" {
+test "execute returns an error for an invalid value of a declared option" {
     const Cmd = @import("Self.zig");
     const cmd = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
@@ -121,22 +121,100 @@ test "execute propagates invalid known option value" {
     }));
 }
 
-test "double dash prevents subcommand lookup" {
+test "execute runs the parent before the child with their respective arguments" {
     const Cmd = @import("Self.zig");
-    const cmd = Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
-        pub fn onExecute(ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
-            try t.expectEqual(@as(usize, 1), ctx.args.len);
-            try t.expectEqualStrings("child", ctx.args[0]);
+    var stage: usize = 0;
+    var child = struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "child" };
+        stage: *usize,
+        calls: usize = 0,
+        saw_args: bool = false,
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
+            self.stage.* = if (self.stage.* == 1) 2 else 999;
+            self.calls += 1;
+            self.saw_args = ctx.args.len == 2 and
+                std.mem.eql(u8, ctx.args[0], "child") and
+                std.mem.eql(u8, ctx.args[1], "payload");
         }
-        pub fn querySubCommand(_: Cmd.Context, _: []const u8) ?Cmd {
+    }{ .stage = &stage };
+    var parent = struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        stage: *usize,
+        child: Cmd,
+        calls: usize = 0,
+        saw_empty_args: bool = false,
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
+            self.stage.* = if (self.stage.* == 0) 1 else 999;
+            self.calls += 1;
+            self.saw_empty_args = ctx.args.len == 0;
+        }
+        pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
+            return if (std.mem.eql(u8, name, "child")) self.child else null;
+        }
+    }{ .stage = &stage, .child = Cmd.initWithCtx(&child, @TypeOf(child)) };
+    try Cmd.initWithCtx(&parent, @TypeOf(parent)).execute(.{
+        .allocator = t.allocator,
+        .args = &.{ "child", "payload" },
+    });
+    try t.expectEqual(@as(usize, 1), parent.calls);
+    try t.expect(parent.saw_empty_args);
+    try t.expectEqual(@as(usize, 1), child.calls);
+    try t.expect(child.saw_args);
+    try t.expectEqual(@as(usize, 2), stage);
+}
+
+test "querySubCommand returns null without a callback and forwards a lookup when present" {
+    const Cmd = @import("Self.zig");
+    const without_query = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+    });
+    const with_query = Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
+            if (!std.mem.eql(u8, name, "child")) return null;
             return Cmd.init(struct {
                 pub const manifest: Cmd.Manifest = .{ .name = "child" };
-                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {
-                    return error.UnexpectedSubcommand;
-                }
+                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
             });
         }
     });
-    try cmd.execute(.{ .allocator = t.allocator, .args = &.{ "--", "child" } });
+    const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{} };
+    try t.expect(querySubCommand(without_query, ctx, "child") == null);
+    try t.expect(querySubCommand(with_query, ctx, "missing") == null);
+    try t.expectEqualStrings("child", querySubCommand(with_query, ctx, "child").?.manifest.name);
+}
+
+test "resolveNextEntry returns the first child before the terminator or null when none exists" {
+    const Cmd = @import("Self.zig");
+    var handler = struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "parent" };
+        queries: usize = 0,
+        pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
+            self.queries += 1;
+            if (!std.mem.eql(u8, name, "child")) return null;
+            return Cmd.init(struct {
+                pub const manifest: Cmd.Manifest = .{ .name = "child" };
+                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+            });
+        }
+    }{};
+    const cmd = Cmd.initWithCtx(&handler, @TypeOf(handler));
+
+    const found = resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{ "other", "child", "child" } }).?;
+    try t.expectEqual(@as(usize, 1), found.idx);
+    try t.expectEqualStrings("child", found.cmd.manifest.name);
+    try t.expectEqual(@as(usize, 2), handler.queries);
+
+    try t.expect(resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{ "other", "--", "child" } }) == null);
+    try t.expectEqual(@as(usize, 3), handler.queries);
+    try t.expect(resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{"missing"} }) == null);
+    try t.expectEqual(@as(usize, 4), handler.queries);
+    const first = resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{"child"} }).?;
+    try t.expectEqual(@as(usize, 0), first.idx);
+    try t.expectEqual(@as(usize, 5), handler.queries);
+    try t.expect(resolveNextEntry(cmd, .{ .allocator = t.allocator, .args = &.{} }) == null);
+    try t.expectEqual(@as(usize, 5), handler.queries);
 }

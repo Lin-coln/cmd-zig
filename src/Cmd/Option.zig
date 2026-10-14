@@ -41,7 +41,7 @@ pub fn parse(self: *const Self, desc: Args.OptionDescriptor) !Value {
     }
 }
 
-test "match uses key and optional alias" {
+test "match accepts matching keys and aliases and rejects other identities" {
     const option: Self = .{ .key = "verbose", .alias = 'v' };
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("--verbose").?));
     try t.expect(option.match(Args.OptionDescriptor.parseFromArg("-v").?));
@@ -51,15 +51,21 @@ test "match uses key and optional alias" {
     try t.expect(!without_alias.match(Args.OptionDescriptor.parseFromArg("-v").?));
 }
 
-test "parse string and boolean option values" {
+test "parse returns the supplied string or an empty string when omitted" {
     const string: Self = .{ .key = "output" };
     try t.expectEqualStrings("file", (try string.parse(Args.OptionDescriptor.parseFromArg("--output=file").?)).string);
     try t.expectEqualStrings("", (try string.parse(Args.OptionDescriptor.parseFromArg("--output").?)).string);
+}
 
+test "parse accepts a missing or valid boolean value" {
     const boolean: Self = .{ .key = "verbose", .type = .boolean };
     try t.expect((try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose").?)).boolean);
     try t.expect((try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=true").?)).boolean);
     try t.expect(!(try boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=false").?)).boolean);
+}
+
+test "parse rejects an invalid boolean value" {
+    const boolean: Self = .{ .key = "verbose", .type = .boolean };
     try t.expectError(error.InvalidOptionValueFound, boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=yes").?));
     try t.expectError(error.InvalidOptionValueFound, boolean.parse(Args.OptionDescriptor.parseFromArg("--verbose=").?));
 }

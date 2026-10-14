@@ -57,27 +57,39 @@ pub fn print(self: *const Self) void {
     }
 }
 
-test "record stores and replaces typed option values" {
+test "get returns null for a missing key" {
+    const record = try Self.create(t.allocator);
+    defer record.destroy();
+    try t.expect((try record.get([]const u8, "name")) == null);
+}
+
+test "set replaces the value at an existing key" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
 
-    try t.expect((try record.get([]const u8, "name")) == null);
     try record.set("name", .{ .string = "first" });
     try t.expectEqualStrings("first", (try record.get([]const u8, "name")).?);
-    try t.expectError(error.OptionTypeMismatch, record.get(bool, "name"));
     try record.set("name", .{ .boolean = true });
     try t.expect((try record.get(bool, "name")).?);
-    try t.expectError(error.OptionTypeMismatch, record.get([]const u8, "name"));
     try record.set("name", .{ .boolean = false });
     try t.expect(!(try record.get(bool, "name")).?);
     try t.expectEqual(@as(usize, 1), record.map.count());
 }
 
-test "getArg formats string and boolean options" {
+test "get returns OptionTypeMismatch when the requested type differs" {
     const record = try Self.create(t.allocator);
     defer record.destroy();
 
-    try t.expect((try record.getArg("missing")) == null);
+    try record.set("name", .{ .string = "first" });
+    try t.expectError(error.OptionTypeMismatch, record.get(bool, "name"));
+    try record.set("name", .{ .boolean = true });
+    try t.expectError(error.OptionTypeMismatch, record.get([]const u8, "name"));
+}
+
+test "getArg formats stored strings and booleans as long option arguments" {
+    const record = try Self.create(t.allocator);
+    defer record.destroy();
+
     const cases = [_]struct { key: []const u8, value: Option.Value, expected: []const u8 }{
         .{ .key = "output", .value = .{ .string = "file.txt" }, .expected = "--output=file.txt" },
         .{ .key = "output", .value = .{ .string = "" }, .expected = "--output=" },
@@ -90,4 +102,10 @@ test "getArg formats string and boolean options" {
         defer t.allocator.free(arg);
         try t.expectEqualStrings(case.expected, arg);
     }
+}
+
+test "getArg returns null for a missing key" {
+    const record = try Self.create(t.allocator);
+    defer record.destroy();
+    try t.expect((try record.getArg("missing")) == null);
 }

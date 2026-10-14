@@ -19,7 +19,7 @@ pub fn parseDescriptorFromArg(arg: []const u8) Descriptor {
     return .{ .unknown = arg };
 }
 
-test "classify option, terminator, and positional arguments" {
+test "parseDescriptorFromArg classifies terminators, options, and unrecognized arguments" {
     try t.expect(parseDescriptorFromArg("--") == .doubleDash);
     const option = parseDescriptorFromArg("-v=true").option;
     try t.expectEqual(@as(u8, 'v'), option.identity.alias);

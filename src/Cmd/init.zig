@@ -54,48 +54,48 @@ pub fn init(comptime Impls: type) Self {
     return .{ .manifest = Impls.manifest, .vt = &Static.vt };
 }
 
-test "comptime stateless command executes without optional handlers" {
+test "init leaves the instance and undeclared callbacks null" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
-        pub const manifest: Cmd.Manifest = .{
-            .name = "root",
-            .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
-        };
+        pub const manifest: Cmd.Manifest = .{ .name = "root" };
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+    });
+    try t.expect(cmd.ptr == null);
+    try t.expect(cmd.vt.querySubCommand == null);
+    try t.expect(cmd.vt.querySubManifests == null);
+}
+
+test "init forwards onExecute to a stateless handler" {
+    const Cmd = @import("Self.zig");
+    const cmd = comptime Cmd.init(struct {
+        pub const manifest: Cmd.Manifest = .{ .name = "root" };
         pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
             try t.expectEqual(@as(usize, 1), ctx.args.len);
             try t.expectEqualStrings("input", ctx.args[0]);
             try t.expect((try opts.get(bool, "help")).?);
         }
     });
-    try t.expect(cmd.ptr == null);
-    try t.expect(cmd.vt.querySubCommand == null);
-    try t.expect(cmd.vt.querySubManifests == null);
-    try cmd.execute(.{ .allocator = t.allocator, .args = &.{ "input", "--help" } });
+    const opts = try Cmd.OptionRecord.create(t.allocator);
+    defer opts.destroy();
+    try opts.set("help", .{ .boolean = true });
+    try cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{"input"} }, opts);
 }
 
-test "stateless query handlers enumerate and dispatch subcommands" {
+test "init forwards stateless subcommand and manifest queries through the vtable" {
     const Cmd = @import("Self.zig");
     const child = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "child",
             .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
         };
-        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
-            try t.expectEqual(@as(usize, 2), ctx.args.len);
-            try t.expectEqualStrings("child", ctx.args[0]);
-            try t.expectEqualStrings("payload", ctx.args[1]);
-            try t.expect((try opts.get(bool, "help")).?);
-        }
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
     });
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "root",
             .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
         };
-        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
-            try t.expectEqual(@as(usize, 0), ctx.args.len);
-            try t.expect((try opts.get(bool, "help")).?);
-        }
+        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
             return if (std.mem.eql(u8, name, "child")) child else null;
         }
@@ -105,11 +105,11 @@ test "stateless query handlers enumerate and dispatch subcommands" {
     });
     const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{ "--help", "child", "payload", "-h" } };
     try t.expect(cmd.vt.querySubCommand.?(cmd.ptr, ctx, "missing") == null);
+    try t.expectEqualStrings("child", cmd.vt.querySubCommand.?(cmd.ptr, ctx, "child").?.manifest.name);
     try t.expectEqualStrings("child", cmd.vt.querySubManifests.?(cmd.ptr, ctx).?[0].name);
-    try cmd.execute(ctx);
 }
 
-test "stateless adapter propagates handler errors" {
+test "init forwards an onExecute error from a stateless handler" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "failing" };
@@ -117,5 +117,7 @@ test "stateless adapter propagates handler errors" {
             return error.StaticFailure;
         }
     });
-    try t.expectError(error.StaticFailure, cmd.execute(.{ .allocator = t.allocator, .args = &.{} }));
+    const opts = try Cmd.OptionRecord.create(t.allocator);
+    defer opts.destroy();
+    try t.expectError(error.StaticFailure, cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{} }, opts));
 }
