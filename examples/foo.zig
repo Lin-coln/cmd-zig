@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const cmd = @import("cmd");
 const Allocator = std.mem.Allocator;
 const Cmd = cmd.Cmd;
+const OptionRecord = cmd.OptionRecord;
 
 extern "kernel32" fn SetConsoleOutputCP(code_page: std.os.windows.UINT) callconv(.winapi) std.os.windows.BOOL;
 
@@ -32,7 +33,7 @@ const rootCommand = Cmd.init(struct {
         },
     };
 
-    pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+    pub fn onExecute(ctx: Cmd.Context, opts: *const OptionRecord) !void {
         for (ctx.args) |arg| {
             std.log.info("{s}", .{arg});
         }
@@ -67,7 +68,7 @@ const RootDynamic = struct {
                 },
             };
 
-            pub fn onExecute(self: *Self, ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+            pub fn onExecute(self: *Self, ctx: Cmd.Context, opts: *const OptionRecord) !void {
                 self.executions += 1;
                 std.log.info("RootDynamic execution #{d}", .{self.executions});
                 for (ctx.args) |arg| {

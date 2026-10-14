@@ -4,7 +4,7 @@ const Args = @import("../Args/Self.zig");
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
-const OptionRecord = Self.OptionRecord;
+const OptionRecord = @import("../Option/Record.zig");
 
 pub fn execute(self: Self, ctx: Context) !void {
     const next = resolveNextEntry(self, ctx);
@@ -101,7 +101,7 @@ test "execute parses declared options and passes through other arguments" {
             .options = &.{.{ .key = "verbose", .alias = 'v', .type = .boolean }},
         };
         calls: usize = 0,
-        pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const OptionRecord) !void {
             self.calls += 1;
             try t.expectEqual(@as(usize, 4), ctx.args.len);
             try t.expectEqualStrings("file", ctx.args[0]);
@@ -126,7 +126,7 @@ test "execute returns an error for an invalid value of a declared option" {
             .name = "run",
             .options = &.{.{ .key = "verbose", .type = .boolean }},
         };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {
             return error.UnexpectedExecution;
         }
     });
@@ -177,7 +177,7 @@ test "execute runs the parent before the child with their respective arguments" 
         stage: *usize,
         calls: usize = 0,
         saw_args: bool = false,
-        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const OptionRecord) !void {
             self.stage.* = if (self.stage.* == 1) 2 else 999;
             self.calls += 1;
             self.saw_args = ctx.args.len == 2 and
@@ -191,7 +191,7 @@ test "execute runs the parent before the child with their respective arguments" 
         child: Cmd,
         calls: usize = 0,
         saw_empty_args: bool = false,
-        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, _: *const OptionRecord) !void {
             self.stage.* = if (self.stage.* == 0) 1 else 999;
             self.calls += 1;
             self.saw_empty_args = ctx.args.len == 0;
@@ -215,16 +215,16 @@ test "querySubCommand returns null without a callback and forwards a lookup when
     const Cmd = @import("Self.zig");
     const without_query = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     const with_query = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
             if (!std.mem.eql(u8, name, "child")) return null;
             return Cmd.init(struct {
                 pub const manifest: Cmd.Manifest = .{ .name = "child" };
-                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+                pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
             });
         }
     });
@@ -239,13 +239,13 @@ test "resolveNextEntry returns the first child before the terminator or null whe
     var handler = struct {
         pub const manifest: Cmd.Manifest = .{ .name = "parent" };
         queries: usize = 0,
-        pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
             self.queries += 1;
             if (!std.mem.eql(u8, name, "child")) return null;
             return Cmd.init(struct {
                 pub const manifest: Cmd.Manifest = .{ .name = "child" };
-                pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+                pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
             });
         }
     }{};

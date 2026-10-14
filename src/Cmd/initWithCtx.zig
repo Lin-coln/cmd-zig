@@ -3,7 +3,7 @@ const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
-const OptionRecord = Self.OptionRecord;
+const OptionRecord = @import("../Option/Record.zig");
 
 const init = @import("init.zig").init;
 
@@ -56,7 +56,7 @@ test "initWithCtx binds each instance to its own state and shares the vtable" {
         arg_count: usize = 0,
         help: bool = false,
 
-        pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(self: *@This(), ctx: Cmd.Context, opts: *const OptionRecord) !void {
             self.executions += 1;
             self.arg_count = ctx.args.len;
             self.help = (try opts.get(bool, "help")) orelse false;
@@ -66,7 +66,7 @@ test "initWithCtx binds each instance to its own state and shares the vtable" {
     const ca = Cmd.initWithCtx(&a, @TypeOf(a));
     const cb = Cmd.initWithCtx(&b, @TypeOf(b));
     const ctx: Cmd.Context = .{ .allocator = t.allocator, .args = &.{"input"} };
-    const opts = try Cmd.OptionRecord.create(t.allocator);
+    const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try opts.set("help", .{ .boolean = true });
     try t.expect(ca.vt == cb.vt);
@@ -86,7 +86,7 @@ test "initWithCtx forwards subcommand and manifest queries to the bound instance
     const Cmd = @import("Self.zig");
     const leaf = Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "child" };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     var parent = struct {
         pub const manifest: Cmd.Manifest = .{ .name = "root" };
@@ -95,7 +95,7 @@ test "initWithCtx forwards subcommand and manifest queries to the bound instance
         child: Cmd,
         manifests: [1]Cmd.Manifest,
 
-        pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: *@This(), _: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(self: *@This(), _: Cmd.Context, name: []const u8) ?Cmd {
             self.queries += 1;
             return if (std.mem.eql(u8, name, self.child.manifest.name)) self.child else null;
@@ -119,13 +119,13 @@ test "initWithCtx forwards an onExecute error from the bound instance" {
     var instance = struct {
         pub const manifest: Cmd.Manifest = .{ .name = "failing" };
         attempted: bool = false,
-        pub fn onExecute(self: *@This(), _: Cmd.Context, _: *const Cmd.OptionRecord) error{DynamicFailure}!void {
+        pub fn onExecute(self: *@This(), _: Cmd.Context, _: *const OptionRecord) error{DynamicFailure}!void {
             self.attempted = true;
             return error.DynamicFailure;
         }
     }{};
     const cmd = Cmd.initWithCtx(&instance, @TypeOf(instance));
-    const opts = try Cmd.OptionRecord.create(t.allocator);
+    const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try t.expectError(error.DynamicFailure, cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{} }, opts));
     try t.expect(instance.attempted);

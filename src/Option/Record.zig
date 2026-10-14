@@ -1,6 +1,6 @@
 const std = @import("std");
 const t = std.testing;
-const Option = @import("Option.zig");
+const Option = @import("Self.zig");
 const Allocator = std.mem.Allocator;
 
 const Self = @This();

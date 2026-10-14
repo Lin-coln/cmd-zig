@@ -3,7 +3,7 @@ const t = std.testing;
 const Self = @import("Self.zig");
 const Context = Self.Context;
 const Manifest = Self.Manifest;
-const OptionRecord = Self.OptionRecord;
+const OptionRecord = @import("../Option/Record.zig");
 
 pub const VTable = struct {
     onExecute: *const fn (?*anyopaque, Context, *const OptionRecord) anyerror!void,
@@ -58,7 +58,7 @@ test "init leaves the instance and undeclared callbacks null" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "root" };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     try t.expect(cmd.ptr == null);
     try t.expect(cmd.vt.querySubCommand == null);
@@ -69,13 +69,13 @@ test "init forwards onExecute to a stateless handler" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "root" };
-        pub fn onExecute(ctx: Cmd.Context, opts: *const Cmd.OptionRecord) !void {
+        pub fn onExecute(ctx: Cmd.Context, opts: *const OptionRecord) !void {
             try t.expectEqual(@as(usize, 1), ctx.args.len);
             try t.expectEqualStrings("input", ctx.args[0]);
             try t.expect((try opts.get(bool, "help")).?);
         }
     });
-    const opts = try Cmd.OptionRecord.create(t.allocator);
+    const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try opts.set("help", .{ .boolean = true });
     try cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{"input"} }, opts);
@@ -88,14 +88,14 @@ test "init forwards stateless subcommand and manifest queries through the vtable
             .name = "child",
             .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
         };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
     });
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{
             .name = "root",
             .options = &.{.{ .key = "help", .alias = 'h', .type = .boolean }},
         };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) !void {}
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) !void {}
         pub fn querySubCommand(_: Cmd.Context, name: []const u8) ?Cmd {
             return if (std.mem.eql(u8, name, "child")) child else null;
         }
@@ -113,11 +113,11 @@ test "init forwards an onExecute error from a stateless handler" {
     const Cmd = @import("Self.zig");
     const cmd = comptime Cmd.init(struct {
         pub const manifest: Cmd.Manifest = .{ .name = "failing" };
-        pub fn onExecute(_: Cmd.Context, _: *const Cmd.OptionRecord) error{StaticFailure}!void {
+        pub fn onExecute(_: Cmd.Context, _: *const OptionRecord) error{StaticFailure}!void {
             return error.StaticFailure;
         }
     });
-    const opts = try Cmd.OptionRecord.create(t.allocator);
+    const opts = try OptionRecord.create(t.allocator);
     defer opts.destroy();
     try t.expectError(error.StaticFailure, cmd.vt.onExecute(cmd.ptr, .{ .allocator = t.allocator, .args = &.{} }, opts));
 }
