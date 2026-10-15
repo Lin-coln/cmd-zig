@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Self = @This();
 allocator: Allocator,
+/// Borrowed arguments. args[0] is the executable path or selected command name.
 args: []const []const u8,
 
 pub fn split(self: Self, idx: usize) struct { Self, Self } {

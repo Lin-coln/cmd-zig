@@ -1,24 +1,19 @@
 const std = @import("std");
 const t = std.testing;
-const Option = @import("Self.zig");
+const Option = @import("../Option/Self.zig");
 const Allocator = std.mem.Allocator;
 
 const Self = @This();
 allocator: Allocator,
+/// Keys and string payloads are borrowed from the caller.
 map: std.StringHashMapUnmanaged(Option.Value) = .empty,
 
-pub fn create(allocator: Allocator) !*Self {
-    const ptr = try allocator.create(Self);
-    errdefer allocator.destroy(ptr);
-    ptr.* = .{
-        .allocator = allocator,
-    };
-    return ptr;
+pub fn init(allocator: Allocator) Self {
+    return .{ .allocator = allocator };
 }
 
-pub fn destroy(self: *Self) void {
+pub fn deinit(self: *Self) void {
     self.map.deinit(self.allocator);
-    self.allocator.destroy(self);
 }
 
 pub fn set(self: *Self, key: []const u8, val: Option.Value) !void {
@@ -61,32 +56,32 @@ const value_cases = .{
     .{ .key = "ratio", .value = Option.Value{ .float = 1.5 }, .expected = @as(f64, 1.5), .arg = "--ratio=1.5" },
 };
 
-test "OptionRecord.get: returns null for a missing key" {
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
-    try t.expect((try record.get([]const u8, "name")) == null);
+test "OptionValues.get: returns null for a missing key" {
+    var values = Self.init(t.allocator);
+    defer values.deinit();
+    try t.expect((try values.get([]const u8, "name")) == null);
 }
 
-test "OptionRecord.set: replaces the value at an existing key" {
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
+test "OptionValues.set: replaces the value at an existing key" {
+    var values = Self.init(t.allocator);
+    defer values.deinit();
 
-    try record.set("name", .{ .string = "first" });
-    try t.expectEqualStrings("first", (try record.get([]const u8, "name")).?);
-    try record.set("name", .{ .boolean = true });
-    try t.expect((try record.get(bool, "name")).?);
-    try t.expectEqual(@as(usize, 1), record.map.count());
+    try values.set("name", .{ .string = "first" });
+    try t.expectEqualStrings("first", (try values.get([]const u8, "name")).?);
+    try values.set("name", .{ .boolean = true });
+    try t.expect((try values.get(bool, "name")).?);
+    try t.expectEqual(@as(usize, 1), values.map.count());
 }
 
-test "OptionRecord.get: returns OptionTypeMismatch for a different type" {
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
+test "OptionValues.get: returns OptionTypeMismatch for a different type" {
+    var values = Self.init(t.allocator);
+    defer values.deinit();
 
-    try record.set("name", .{ .string = "first" });
-    try t.expectError(error.OptionTypeMismatch, record.get(bool, "name"));
+    try values.set("name", .{ .string = "first" });
+    try t.expectError(error.OptionTypeMismatch, values.get(bool, "name"));
 }
 
-test "OptionRecord.get: returns the stored payload for every value type" {
+test "OptionValues.get: returns the stored payload for every value type" {
     comptime {
         for (@typeInfo(Option.Type).@"enum".fields) |field| {
             var covered = false;
@@ -96,29 +91,29 @@ test "OptionRecord.get: returns the stored payload for every value type" {
             if (!covered) @compileError("value_cases needs a " ++ field.name ++ " example");
         }
     }
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
+    var values = Self.init(t.allocator);
+    defer values.deinit();
 
     inline for (value_cases) |case| {
-        try record.set(case.key, case.value);
-        try t.expectEqualDeep(case.expected, (try record.get(@TypeOf(case.expected), case.key)).?);
+        try values.set(case.key, case.value);
+        try t.expectEqualDeep(case.expected, (try values.get(@TypeOf(case.expected), case.key)).?);
     }
 }
 
-test "OptionRecord.getArg: formats stored values as long option arguments" {
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
+test "OptionValues.getArg: formats stored values as long option arguments" {
+    var values = Self.init(t.allocator);
+    defer values.deinit();
 
     inline for (value_cases) |case| {
-        try record.set(case.key, case.value);
-        const arg = (try record.getArg(case.key)).?;
+        try values.set(case.key, case.value);
+        const arg = (try values.getArg(case.key)).?;
         defer t.allocator.free(arg);
         try t.expectEqualStrings(case.arg, arg);
     }
 }
 
-test "OptionRecord.getArg: returns null for a missing key" {
-    const record = try Self.create(t.allocator);
-    defer record.destroy();
-    try t.expect((try record.getArg("missing")) == null);
+test "OptionValues.getArg: returns null for a missing key" {
+    var values = Self.init(t.allocator);
+    defer values.deinit();
+    try t.expect((try values.getArg("missing")) == null);
 }
