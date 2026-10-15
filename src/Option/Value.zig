@@ -39,8 +39,11 @@ test "Value.parse: returns the declared type for valid raw values" {
         .{ .kind = .int, .raw = "42", .expected = .{ .int = 42 } },
         .{ .kind = .int, .raw = "0", .expected = .{ .int = 0 } },
         .{ .kind = .int, .raw = "-1", .expected = .{ .int = -1 } },
+        .{ .kind = .int, .raw = "-9223372036854775808", .expected = .{ .int = std.math.minInt(i64) } },
+        .{ .kind = .int, .raw = "9223372036854775807", .expected = .{ .int = std.math.maxInt(i64) } },
         .{ .kind = .float, .raw = "1.5", .expected = .{ .float = 1.5 } },
         .{ .kind = .float, .raw = "-0.25", .expected = .{ .float = -0.25 } },
+        .{ .kind = .float, .raw = "0.1", .expected = .{ .float = 0.1 } },
     };
     comptime {
         for (@typeInfo(Type).@"enum".fields) |field| {

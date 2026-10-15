@@ -31,7 +31,7 @@ pub fn WithSubcommands(
 
 test "WithSubcommands.execute: binds parent execution and queries to each instance" {
     const State = struct {
-        const Self = @This();
+        expected_ctx: Context,
         executions: usize = 0,
         queries: usize = 0,
         child_executions: usize = 0,
@@ -41,11 +41,16 @@ test "WithSubcommands.execute: binds parent execution and queries to each instan
             try t.expectEqual(@as(usize, 1), ctx.args.len);
             try t.expectEqualStrings("tool", ctx.args[0]);
         }
-        pub fn querySubCommand(self: *@This(), _: Context, name: []const u8) !?Cmd {
+    };
+    const Queries = struct {
+        pub fn querySubCommand(self: *State, query_ctx: Context, name: []const u8) !?Cmd {
+            try t.expect(query_ctx.args.ptr == self.expected_ctx.args.ptr);
+            try t.expectEqualDeep(self.expected_ctx.args, query_ctx.args);
+            try t.expectEqual(self.expected_ctx.allocator, query_ctx.allocator);
             self.queries += 1;
             if (!std.mem.eql(u8, name, "child")) return null;
             return Cmd.initWithCtx(self, struct {
-                pub fn execute(state: *Self, ctx: Context) !void {
+                pub fn execute(state: *State, ctx: Context) !void {
                     state.child_executions += 1;
                     try t.expectEqual(@as(usize, 2), ctx.args.len);
                     try t.expectEqualStrings("child", ctx.args[0]);
@@ -54,10 +59,10 @@ test "WithSubcommands.execute: binds parent execution and queries to each instan
             });
         }
     };
-    const Nested = WithSubcommands(State, State.execute, State);
-    var first: State = .{};
-    var second: State = .{};
+    const Nested = WithSubcommands(State, State.execute, Queries);
     const ctx: Context = .{ .allocator = t.allocator, .args = &.{ "tool", "child", "payload" } };
+    var first: State = .{ .expected_ctx = ctx };
+    var second: State = .{ .expected_ctx = ctx };
     try Cmd.initWithCtx(&first, Nested).execute(ctx);
     try Nested.execute(&first, ctx);
     try Nested.execute(&second, ctx);
@@ -82,6 +87,41 @@ test "WithSubcommands.execute: forwards an error from the typed query" {
         .allocator = t.allocator,
         .args = &.{ "tool", "child" },
     }));
+}
+
+test "WithSubcommands.execute: preserves protected arguments after outer option parsing" {
+    const OptionValues = @import("OptionValues/Self.zig");
+    const WithOptions = @import("WithOptions.zig").WithOptions;
+    const State = struct {
+        const Self = @This();
+        parent_calls: usize = 0,
+        child_calls: usize = 0,
+
+        fn parent(self: *@This(), ctx: Context) !void {
+            self.parent_calls += 1;
+            try t.expectEqualDeep(@as([]const []const u8, &.{ "bin_path", "--", "child" }), ctx.args);
+        }
+        fn route(self: *@This(), ctx: Context, _: *const OptionValues) !void {
+            const Nested = WithSubcommands(@This(), parent, @This());
+            try Nested.execute(self, ctx);
+        }
+        fn child(self: *@This(), _: Context) !void {
+            self.child_calls += 1;
+        }
+        pub fn querySubCommand(self: *@This(), _: Context, name: []const u8) !?Cmd {
+            return if (std.mem.eql(u8, name, "child")) Cmd.initWithCtx(self, struct {
+                pub const execute = Self.child;
+            }) else null;
+        }
+    };
+    const Parsed = WithOptions(State, &.{}, State.route);
+    var state: State = .{};
+    try Parsed.execute(&state, .{
+        .allocator = t.allocator,
+        .args = &.{ "bin_path", "--", "child" },
+    });
+    try t.expectEqual(@as(usize, 1), state.parent_calls);
+    try t.expectEqual(@as(usize, 0), state.child_calls);
 }
 
 test "WithSubcommands.execute: composes independent parent and child options with lazy resource cleanup" {

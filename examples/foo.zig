@@ -100,3 +100,51 @@ const Child = struct {
         opts.print();
     }
 };
+
+test "App.querySubSpecs: returns child metadata without loading resources" {
+    const t = std.testing;
+    var app: App = .{};
+    const specs = (try app.querySubSpecs(.{
+        .allocator = t.failing_allocator,
+        .args = &.{"foo"},
+    })).?;
+    try t.expectEqualDeep(@as([]const cmd.CmdSpec, &.{child_spec}), specs);
+}
+
+test "App.querySubCommand: returns child commands without loading resources" {
+    const t = std.testing;
+    var app: App = .{};
+    const ctx: Context = .{ .allocator = t.failing_allocator, .args = &.{ "/bin/foo", "child" } };
+    try t.expect((try app.querySubCommand(ctx, "child")) != null);
+    try t.expect((try app.querySubCommand(ctx, "unknown")) == null);
+    try t.expectEqual(@as(usize, 0), app.executions);
+}
+
+test "App.command: routes child execution and propagates option parsing failure" {
+    const t = std.testing;
+    var app: App = .{};
+    try t.expectError(error.InvalidOptionValueFound, app.command().execute(.{
+        .allocator = t.allocator,
+        .args = &.{ "/bin/foo", "child", "--count=invalid" },
+    }));
+    try t.expectEqual(@as(usize, 1), app.executions);
+}
+
+test "LazyChild.execute: releases child resources on success and option parsing failure" {
+    const t = std.testing;
+    const cases = [_]struct {
+        args: []const []const u8,
+        expected_error: ?anyerror = null,
+    }{
+        .{ .args = &.{ "child", "--count=3", "payload" } },
+        .{ .args = &.{ "child", "--count=invalid" }, .expected_error = error.InvalidOptionValueFound },
+    };
+    inline for (cases) |case| {
+        const result = LazyChild.execute(.{ .allocator = t.allocator, .args = case.args });
+        if (case.expected_error) |err| {
+            try t.expectError(err, result);
+        } else {
+            try result;
+        }
+    }
+}

@@ -6,6 +6,7 @@ const Option = @import("Option/Self.zig");
 const OptionValues = @import("OptionValues/Self.zig");
 
 /// The handler borrows the filtered arguments and parsed values until it returns.
+/// args[0] and the "--" terminator are preserved for subsequent execution.
 pub fn executeWithOptions(
     ctx: Context,
     options: []const Option,
@@ -29,7 +30,6 @@ pub fn executeWithOptions(
         switch (descriptor) {
             .doubleDash => {
                 after_double_dash = true;
-                continue;
             },
             .option => |desc| {
                 const option = blk: {
@@ -70,7 +70,7 @@ test "executeWithOptions: parses declared options and passes through other argum
             const called_ptr: *bool = @ptrCast(@alignCast(raw.?));
             called_ptr.* = true;
             try t.expectEqualDeep(
-                @as([]const []const u8, &.{ "run", "file", "--unknown", "-v", "--verbose=false" }),
+                @as([]const []const u8, &.{ "run", "file", "--unknown", "--", "-v", "--verbose=false" }),
                 ctx.args,
             );
             try t.expect(ctx.allocator.ptr == t.allocator.ptr);

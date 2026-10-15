@@ -60,3 +60,42 @@ test "WithOptions.execute: propagates an error from the typed handler" {
     }));
     try t.expect(state.called);
 }
+
+test "WithOptions.execute: preserves the terminator across consecutive option parsers" {
+    const State = struct {
+        expected_args: []const []const u8,
+        expected_count: ?i64,
+        called: bool = false,
+
+        const Outer = WithOptions(@This(), &.{Option.boolean("--verbose")}, parseNext);
+        const Inner = WithOptions(@This(), &.{Option.int("--count=<n>")}, run);
+
+        fn parseNext(self: *@This(), ctx: Context, values: *const OptionValues) !void {
+            try t.expect((try values.get(bool, "verbose")).?);
+            try Inner.execute(self, ctx);
+        }
+
+        fn run(self: *@This(), ctx: Context, values: *const OptionValues) !void {
+            self.called = true;
+            try t.expectEqualDeep(self.expected_args, ctx.args);
+            try t.expectEqual(self.expected_count, try values.get(i64, "count"));
+        }
+    };
+    const cases = .{
+        .{
+            .args = @as([]const []const u8, &.{ "/bin/foo", "--verbose", "--count=2" }),
+            .remaining = @as([]const []const u8, &.{"/bin/foo"}),
+            .count = @as(?i64, 2),
+        },
+        .{
+            .args = @as([]const []const u8, &.{ "/bin/foo", "--verbose", "--", "--count=2", "--" }),
+            .remaining = @as([]const []const u8, &.{ "/bin/foo", "--", "--count=2", "--" }),
+            .count = @as(?i64, null),
+        },
+    };
+    inline for (cases) |case| {
+        var state: State = .{ .expected_args = case.remaining, .expected_count = case.count };
+        try State.Outer.execute(&state, .{ .allocator = t.allocator, .args = case.args });
+        try t.expect(state.called);
+    }
+}
